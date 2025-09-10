@@ -3,6 +3,7 @@
 #:package OllamaSharp@5.*
 #:property Nullable=enable
 #:property ImplicitUsings=true
+#:property PublishAot=false
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
