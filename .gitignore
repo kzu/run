@@ -1,3 +1,6 @@
+nuget.config
+global.json
+
 bin
 obj
 artifacts

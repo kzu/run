@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "ollama.cs": {
+      "commandName": "Project"
+    },
+    "WSL": {
+      "commandName": "WSL2",
+      "distributionName": ""
+    }
+  }
+}
