@@ -1,4 +1,4 @@
-﻿<Project Sdk="SmallSharp/2.1.1">
+﻿<Project Sdk="SmallSharp/2.2.1">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>

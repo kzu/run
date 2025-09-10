@@ -6,6 +6,9 @@
     "WSL": {
       "commandName": "WSL2",
       "distributionName": ""
+    },
+    "hello.cs": {
+      "commandName": "Project"
     }
   }
 }

@@ -1,8 +1,8 @@
 #:package Microsoft.Extensions.AI@9.*
 #:package Microsoft.Extensions.DependencyInjection@9.*
 #:package OllamaSharp@5.*
-#:property Nullable enable
-#:property ImplicitUsings enable
+#:property Nullable=enable
+#:property ImplicitUsings=true
 
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
