@@ -24,7 +24,8 @@ await ConsoleApp.RunAsync(args, SyncSecrets);
 /// <summary>Syncronizes secrets from an Azure KeyVault to dotnet user-secrets</summary>
 /// <param name="id">Secrets ID to sync to, if different than the current directory project's.</param>
 /// <param name="vault">Azure KeyVault to sync from. Selects interactively if not specified.</param>
-async Task SyncSecrets(string? id = default, string? vault = default)
+/// <param name="confirm">Whether to ask for confirmation before modifying local secrets.</param>
+async Task SyncSecrets(string? id = default, string? vault = default, bool confirm = false)
 {
     if (string.IsNullOrWhiteSpace(vault))
     {
@@ -117,6 +118,20 @@ async Task SyncSecrets(string? id = default, string? vault = default)
                 }
                 else
                 {
+                    if (confirm)
+                    {
+                        var overwrite = AnsiConsole.Prompt(
+                            new SelectionPrompt<string>()
+                                .Title($"Secret [lime]{name}[/] already exists locally with a different value. Overwrite?")
+                                .AddChoices(["Yes", "No"]));
+
+                        if (overwrite == "No")
+                        {
+                            table.AddRow(":warning:", name);
+                            continue;
+                        }
+                    }
+
                     await Cli.Wrap("dotnet")
                         .WithArguments($"user-secrets set \"{name}\" \"{value}\" --id {id}")
                         .ExecuteBufferedAsync();
