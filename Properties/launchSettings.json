@@ -9,6 +9,9 @@
     },
     "hello.cs": {
       "commandName": "Project"
+    },
+    "vault2secrets.cs": {
+      "commandName": "Project"
     }
   }
 }
