@@ -26,36 +26,43 @@ await ConsoleApp.RunAsync(args, SyncSecrets);
 /// <param name="vault">Azure KeyVault to sync from. Selects interactively if not specified.</param>
 async Task SyncSecrets(string? id = default, string? vault = default)
 {
-    var command = await AnsiConsole.Status().StartAsync("Listing Azure KeyVaults...", 
-        async _ => await Cli.Wrap("az")
-            .WithArguments("keyvault list --query \"[].name\"")
-            .WithValidation(CommandResultValidation.None)
-            .ExecuteBufferedAsync());
-
-    if (!command.IsSuccess)
-    {
-        AnsiConsole.MarkupLine("[red]Error:[/] Could not list Azure KeyVaults. Please ensure you are logged in with 'az login'.");
-        return;
-    }
-
-    var names = JsonSerializer.Deserialize<List<string>>(command.StandardOutput);
-    if (names is null)
-        return;
-
-    names.Sort();
-
     if (string.IsNullOrWhiteSpace(vault))
     {
+        var vaultsCmd = await AnsiConsole.Status().StartAsync("Listing Azure KeyVaults...",
+            async _ => await Cli.Wrap("az")
+                .WithArguments("keyvault list --query \"[].name\"")
+                .WithValidation(CommandResultValidation.None)
+                .ExecuteBufferedAsync());
+
+        if (!vaultsCmd.IsSuccess)
+        {
+            AnsiConsole.MarkupLine(":cross_mark: Could not list Azure KeyVaults. Please ensure you are logged in with 'az login'.");
+            return;
+        }
+
+        var names = JsonSerializer.Deserialize<List<string>>(vaultsCmd.StandardOutput);
+        if (names is null)
+            return;
+
+        names.Sort();
+
         vault = AnsiConsole.Prompt(
             new SelectionPrompt<string>()
                 .Title("Select an Azure KeyVault to import as dotnet user-secrets:")
                 .AddChoices(names));
     }
 
-    command = await AnsiConsole.Status().StartAsync($"Listing secrets in KeyVault {vault}...", 
+    var command = await AnsiConsole.Status().StartAsync($"Listing secrets in KeyVault {vault}...", 
         async _ => await Cli.Wrap("az")
             .WithArguments($"keyvault secret list --vault-name {vault} --query \"[].name\"")
+            .WithValidation(CommandResultValidation.None)
             .ExecuteBufferedAsync());
+
+    if (!command.IsSuccess)
+    {
+        AnsiConsole.MarkupLine($":cross_mark: Could not list secrets in Azure KeyVault '{vault}'. Please ensure you are logged in with 'az login'.");
+        return;
+    }
 
     var secrets = JsonSerializer.Deserialize<string[]>(command.StandardOutput);
     if (secrets is null)
@@ -75,7 +82,7 @@ async Task SyncSecrets(string? id = default, string? vault = default)
         if (secretsCmd.IsSuccess)
             id = secretsCmd.StandardOutput.Trim();
         else
-            id = AnsiConsole.Prompt(new TextPrompt<string>("Could not determine UserSecretsId from the current directory's project. Please provide it as a parameter:")
+            id = AnsiConsole.Prompt(new TextPrompt<string>("Could not determine secrets ID from the current directory's project, please enter a value:")
                 .PromptStyle("red")
                 .ValidationErrorMessage("Invalid input")
                 .Validate(id => !string.IsNullOrWhiteSpace(id)));
