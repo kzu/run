@@ -30,3 +30,13 @@ The summary of the run shows what action was taken for each secret:
 
 The updated secrets JSON is formatted with nested sections as appropriate 
 for easier reading/editing.
+
+## Clean bin/obj recursively
+
+```pwsh
+dnx runcs kzu/run:clean.cs
+```
+
+What you would expect `dotnet clean` to do, but it doesn't :)
+
+![clean](https://raw.githubusercontent.com/kzu/run/main/img/clean.png)

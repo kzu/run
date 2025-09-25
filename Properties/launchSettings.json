@@ -12,6 +12,10 @@
     },
     "vault2secrets.cs": {
       "commandName": "Project"
+    },
+    "clean.cs": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\Code\\ThisAssembly"
     }
   }
 }
