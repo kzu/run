@@ -15,7 +15,23 @@
     },
     "clean.cs": {
       "commandName": "Project",
-      "workingDirectory": "C:\\Code\\ThisAssembly"
+      "workingDirectory": "C:\\Code\\ThisAssembly",
+      "commandLineArgs": "--dry-run"
+    },
+    "cecil.cs": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Code\\CloudActors\\src\\CloudActors.Abstractions.CodeAnalysis\\obj\\Debug\\netstandard2.0\\Devlooped.CloudActors.Abstractions.CodeAnalysis.dll Orleans.CodeGenerator.OrleansSerializationSourceGenerator"
+    },
+    "publish.cs": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Code\\runfile\\src\\runfile\\runfile.csproj"
+    },
+    "avalonia.cs": {
+      "commandName": "Project",
+      "commandLineArgs": "C:\\Code\\runfile\\src\\Avalonia.targets --update"
+    },
+    "protofix.cs": {
+      "commandName": "Project"
     }
   }
 }

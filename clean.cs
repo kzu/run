@@ -1,4 +1,4 @@
-﻿// Cleans bin/obj recursively
+﻿﻿// Cleans bin/obj recursively
 #:package Spectre.Console@0.51.*
 #:property Nullable=enable
 #:property ImplicitUsings=enable
@@ -7,33 +7,31 @@
 using Spectre.Console;
 using ConsoleAppFramework;
 
-ConsoleApp.Run(args, () => DeleteDirectories(Directory.GetCurrentDirectory()));
+ConsoleApp.Run(args, (bool dryRun) => DeleteDirectories(Directory.GetCurrentDirectory(), dryRun));
 
-static void DeleteDirectories(string dir)
+static void DeleteDirectories(string dir, bool dryRun)
 {
-    // Delete bin and obj in current directory
-    TryDeleteDirectory(Path.Combine(dir, "bin"));
-    TryDeleteDirectory(Path.Combine(dir, "obj"));
+    TryDeleteDirectory(Path.Combine(dir, "bin"), dryRun);
+    TryDeleteDirectory(Path.Combine(dir, "obj"), dryRun);
 
-    // Recurse into subdirectories
     foreach (string subDir in Directory.GetDirectories(dir))
-    {
-        DeleteDirectories(subDir);
-    }
+        DeleteDirectories(subDir, dryRun);
 }
 
-static void TryDeleteDirectory(string dir)
+static void TryDeleteDirectory(string dir, bool dryRun)
 {
-    if (Directory.Exists(dir))
+    if (!Directory.Exists(dir))
+        return;
+    
+    try
     {
-        try
-        {
+        if (!dryRun) 
             Directory.Delete(dir, true);
-            AnsiConsole.MarkupLine($":check_mark_button: .{dir.Substring(Directory.GetCurrentDirectory().Length)}");
-        }
-        catch (Exception ex)
-        {
-            AnsiConsole.MarkupLine($":cross_mark: .{dir.Substring(Directory.GetCurrentDirectory().Length)}: {ex.Message}");
-        }
+
+        AnsiConsole.MarkupLine($":check_mark_button:{(dryRun ? ":ghost:" : "")} .{dir.Substring(Directory.GetCurrentDirectory().Length)}");
+    }
+    catch (Exception ex)
+    {
+        AnsiConsole.MarkupLine($":cross_mark: .{dir.Substring(Directory.GetCurrentDirectory().Length)}: {ex.Message}");
     }
 }
