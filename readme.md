@@ -1,9 +1,9 @@
-# :runner: dnx runcs kzu/run:file.cs
+# :runner: dnx runfile kzu/run:file.cs
 
 Quickly and easily run any file in this repo using .NET 10 CLI: 
 
 ```pwsh
-dnx runcs kzu/run:file.cs
+dnx runfile kzu/run:file.cs
 ```
 
 The following are the available scripts.
@@ -11,7 +11,7 @@ The following are the available scripts.
 ## Azure KeyVault to dotnet-secrets sync
 
 ```pwsh
-dnx runcs kzu/run:vault2secrets.cs
+dnx runfile kzu/run:vault2secrets.cs
 ```
 
 Uses the `az` CLI to fetch secrets from an Azure KeyVault and sync them to 
@@ -34,7 +34,7 @@ for easier reading/editing.
 ## Clean bin/obj recursively
 
 ```pwsh
-dnx runcs kzu/run:clean.cs
+dnx runfile kzu/run:clean.cs
 ```
 
 What you would expect `dotnet clean` to do, but it doesn't :)
