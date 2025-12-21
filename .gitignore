@@ -3,6 +3,7 @@ global.json
 Run.slnx
 Run.sln
 Run.csproj
+launchSettings.json
 
 bin
 obj
