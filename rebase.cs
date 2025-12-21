@@ -1,6 +1,6 @@
 ﻿#:package LibGit2Sharp@0.*
 #:package Spectre.Console@0.*
-
+#nullable enable
 using System;
 using System.Linq;
 using LibGit2Sharp;
@@ -95,13 +95,12 @@ try
         conflicts = AnsiConsole.Status()
             .Start($"Rebasing onto {upstreamBranch.FriendlyName}...", ctx =>
             {
-                var rebaseOptions = new RebaseOptions();
                 var rebaseResult = repo.Rebase.Start(
                     branch: currentBranch,
                     upstream: upstreamBranch,
                     onto: null,
                     committer: identity,
-                    options: rebaseOptions);
+                    options: new RebaseOptions());
 
                 if (rebaseResult.Status != RebaseStatus.Complete)
                 {
