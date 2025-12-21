@@ -1,5 +1,8 @@
 nuget.config
 global.json
+Run.slnx
+Run.sln
+Run.csproj
 
 bin
 obj

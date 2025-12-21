@@ -40,3 +40,13 @@ dnx runfile kzu/run:clean.cs
 What you would expect `dotnet clean` to do, but it doesn't :)
 
 ![clean](https://raw.githubusercontent.com/kzu/run/main/img/clean.png)
+
+
+## Contributing
+
+You copy `Run.csproj.rename` to `Run.csproj` and then open it in VS. You just select 
+the script you want to run as the startup file and hit F5.
+
+The project file as well as the solution file are set to be ignored by git, so they 
+are never committed where they can interfere with the [dnx runfile](https://www.nuget.org/packages/runfile) 
+usage.
