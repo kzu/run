@@ -1,11 +1,11 @@
-﻿﻿// Cleans bin/obj recursively
-#:package Spectre.Console@0.51.*
-#:property Nullable=enable
-#:property ImplicitUsings=enable
-#:package ConsoleAppFramework@5.*
+﻿// Cleans bin/obj recursively
+# : package Spectre.Console@0.51.*
+# : property Nullable=enable
+# : property ImplicitUsings=enable
+# : package ConsoleAppFramework@5.*
 
-using Spectre.Console;
 using ConsoleAppFramework;
+using Spectre.Console;
 
 ConsoleApp.Run(args, Clean);
 
@@ -25,9 +25,12 @@ static void DeleteDirectories(string dir, bool dryRun, CancellationToken cancell
 
     foreach (string subDir in Directory.GetDirectories(dir))
     {
+        if (Path.GetDirectoryName(subDir) == "node_modules")
+            continue;
+
         if (cancellation.IsCancellationRequested)
             break;
-            
+
         DeleteDirectories(subDir, dryRun, cancellation);
     }
 }
@@ -36,10 +39,10 @@ static void TryDeleteDirectory(string dir, bool dryRun)
 {
     if (!Directory.Exists(dir))
         return;
-    
+
     try
     {
-        if (!dryRun) 
+        if (!dryRun)
             Directory.Delete(dir, true);
 
         AnsiConsole.MarkupLine($":check_mark_button:{(dryRun ? ":ghost:" : "")} .{dir.Substring(Directory.GetCurrentDirectory().Length)}");
