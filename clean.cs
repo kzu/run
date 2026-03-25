@@ -1,8 +1,8 @@
 ﻿// Cleans bin/obj recursively
-# : package Spectre.Console@0.51.*
-# : property Nullable=enable
-# : property ImplicitUsings=enable
-# : package ConsoleAppFramework@5.*
+#:package Spectre.Console@0.51.*
+#:property Nullable=enable
+#:property ImplicitUsings=enable
+#:package ConsoleAppFramework@5.*
 
 using ConsoleAppFramework;
 using Spectre.Console;
