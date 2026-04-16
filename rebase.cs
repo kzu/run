@@ -68,6 +68,19 @@ try
         if (remoteBranch == null)
         {
             upstreamBranch = currentBranch.TrackedBranch;
+
+            if (upstreamBranch == null)
+            {
+                foreach (var candidate in new[] { "main", "master" })
+                {
+                    var candidateRef = $"refs/remotes/{remoteName}/{candidate}";
+                    upstreamBranch = repo.Branches
+                        .OfType<Branch>()
+                        .FirstOrDefault(b => b.CanonicalName == candidateRef);
+                    if (upstreamBranch != null)
+                        break;
+                }
+            }
         }
         else
         {
