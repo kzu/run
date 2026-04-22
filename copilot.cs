@@ -57,7 +57,21 @@ class ProviderConfig
     public string BaseUrl { get; set; } = string.Empty;
 
     [JsonPropertyName("models")]
-    public List<string> Models { get; set; } = new();
+    public List<ModelInfo> Models { get; set; } = new();
+}
+
+class ModelInfo
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("max_prompt_tokens")]
+    public int? MaxPromptTokens { get; set; }
+
+    [JsonPropertyName("max_output_tokens")]
+    public int? MaxOutputTokens { get; set; }
+
+    public override string ToString() => Id;
 }
 
 // ============================================================================
@@ -113,11 +127,6 @@ class AddCommand : AsyncCommand
         if (string.IsNullOrWhiteSpace(baseUrl))
             baseUrl = defaultBaseUrl;
 
-        // Prompt for API key
-        var apiKey = AnsiConsole.Prompt(
-            new TextPrompt<string>("Enter [green]API Key[/]:")
-                .Secret());
-
         // Determine if we need a friendly name
         string providerName = providerType;
         bool needsFriendlyName = providerType switch
@@ -134,13 +143,39 @@ class AddCommand : AsyncCommand
                     .DefaultValue(providerType));
         }
 
+        // Check for existing API key
+        var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
+        var existingCredential = store.Get(baseUrl, providerName);
+        string apiKey;
+
+        if (existingCredential != null)
+        {
+            AnsiConsole.MarkupLine($"\n[green]✓[/] Found existing API key for [cyan]{providerName}[/]");
+            apiKey = existingCredential.Password;
+        }
+        else
+        {
+            // Prompt for API key
+            apiKey = AnsiConsole.Prompt(
+                new TextPrompt<string>("Enter [green]API Key[/]:")
+                    .Secret());
+        }
+
         AnsiConsole.MarkupLine($"\n[green]✓[/] Provider: {providerName}");
         AnsiConsole.MarkupLine($"[green]✓[/] Type: {providerTypeKey}");
         AnsiConsole.MarkupLine($"[green]✓[/] Base URL: {baseUrl}");
-        AnsiConsole.MarkupLine($"[green]✓[/] API Key: [dim]***[/]");
+        if (existingCredential != null)
+            AnsiConsole.MarkupLine($"[green]✓[/] API Key: [dim](loaded from secure storage)[/]");
+        else
+            AnsiConsole.MarkupLine($"[green]✓[/] API Key: [dim]***[/]");
+
+        // Load existing config to check for existing models
+        var configPath = GetConfigPath();
+        var config = LoadConfig(configPath);
+        var existingProvider = config.Providers.FirstOrDefault(p => p.Name == providerName);
 
         // Fetch models if supported
-        List<string> selectedModels = new();
+        List<ModelInfo> selectedModels = new();
         bool canFetchModels = providerType is "OpenAI" or "xAI" or "Anthropic";
 
         if (canFetchModels)
@@ -155,13 +190,22 @@ class AddCommand : AsyncCommand
 
             if (models.Count > 0)
             {
-                selectedModels = AnsiConsole.Prompt(
-                    new MultiSelectionPrompt<string>()
+                var selectionPrompt = new MultiSelectionPrompt<ModelInfo>()
                         .Title("Select [green]models[/] to use:")
                         .PageSize(10)
                         .MoreChoicesText("[grey](Move up and down to reveal more models)[/]")
-                        .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]")
-                        .AddChoices(models));
+                        .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]");
+
+                foreach (var m in models)
+                {
+                    var choice = selectionPrompt.AddChoice(m);
+                    if (existingProvider != null && existingProvider.Models.Any(em => em.Id == m.Id))
+                    {
+                        choice.Select();
+                    }
+                }
+
+                selectedModels = AnsiConsole.Prompt(selectionPrompt);
 
                 AnsiConsole.MarkupLine($"[green]✓[/] Selected {selectedModels.Count} model(s)");
             }
@@ -174,7 +218,7 @@ class AddCommand : AsyncCommand
                         .AllowEmpty());
 
                 if (!string.IsNullOrWhiteSpace(manualModel))
-                    selectedModels.Add(manualModel);
+                    selectedModels.Add(new ModelInfo { Id = manualModel });
             }
         }
         else
@@ -185,14 +229,11 @@ class AddCommand : AsyncCommand
                     .AllowEmpty());
 
             if (!string.IsNullOrWhiteSpace(manualModel))
-                selectedModels.Add(manualModel);
+                selectedModels.Add(new ModelInfo { Id = manualModel });
         }
 
         // Save configuration
         AnsiConsole.MarkupLine("\n[yellow]Saving configuration...[/]");
-
-        var configPath = GetConfigPath();
-        var config = LoadConfig(configPath);
 
         // Remove existing provider with the same name
         config.Providers.RemoveAll(p => p.Name == providerName);
@@ -217,8 +258,7 @@ class AddCommand : AsyncCommand
         await File.WriteAllTextAsync(configPath, json);
 
         // Save API key to credential manager
-        var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
-        store.AddOrUpdate(providerName, "apikey", apiKey);
+        store.AddOrUpdate(baseUrl, providerName, apiKey);
 
         AnsiConsole.MarkupLine($"[green]✓[/] Configuration saved to {configPath}");
         AnsiConsole.MarkupLine($"[green]✓[/] API key saved securely");
@@ -248,7 +288,7 @@ class AddCommand : AsyncCommand
         }
     }
 
-    private static async Task<List<string>> FetchModelsAsync(string baseUrl, string apiKey, string providerType)
+    private static async Task<List<ModelInfo>> FetchModelsAsync(string baseUrl, string apiKey, string providerType)
     {
         try
         {
@@ -266,24 +306,46 @@ class AddCommand : AsyncCommand
             var response = await client.GetStringAsync(modelsUrl);
 
             using var doc = JsonDocument.Parse(response);
-            var models = new List<string>();
+            var models = new List<ModelInfo>();
 
             if (doc.RootElement.TryGetProperty("data", out var dataArray))
             {
                 foreach (var item in dataArray.EnumerateArray())
                 {
-                    if (item.TryGetProperty("id", out var id))
+                    if (item.TryGetProperty("id", out var idProp) && idProp.ValueKind == JsonValueKind.String)
                     {
-                        models.Add(id.GetString() ?? "");
+                        var id = idProp.GetString() ?? "";
+                        if (string.IsNullOrWhiteSpace(id)) continue;
+
+                        var modelInfo = new ModelInfo { Id = id };
+
+                        if (item.TryGetProperty("max_prompt_tokens", out var promptTokens) && promptTokens.ValueKind == JsonValueKind.Number)
+                        {
+                            modelInfo.MaxPromptTokens = promptTokens.GetInt32();
+                        }
+                        else if (item.TryGetProperty("max_input_tokens", out var inputTokens) && inputTokens.ValueKind == JsonValueKind.Number)
+                        {
+                            modelInfo.MaxPromptTokens = inputTokens.GetInt32();
+                        }
+                        if (item.TryGetProperty("max_output_tokens", out var outputTokens) && outputTokens.ValueKind == JsonValueKind.Number)
+                        {
+                            modelInfo.MaxOutputTokens = outputTokens.GetInt32();
+                        }
+                        else if (item.TryGetProperty("max_tokens", out var maxTokens) && maxTokens.ValueKind == JsonValueKind.Number)
+                        {
+                            modelInfo.MaxOutputTokens = maxTokens.GetInt32();
+                        }
+
+                        models.Add(modelInfo);
                     }
                 }
             }
 
-            return models.Where(m => !string.IsNullOrWhiteSpace(m)).ToList();
+            return models;
         }
         catch
         {
-            return new List<string>();
+            return new List<ModelInfo>();
         }
     }
 }
@@ -320,6 +382,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
                 var providerChoices = new List<string> { "Copilot (Default)" };
                 providerChoices.AddRange(config.Providers.Select(p => p.Name));
                 providerChoices.Add("Add BYOK...");
+                providerChoices.Add("Edit BYOK...");
 
                 selectedProvider = AnsiConsole.Prompt(
                     new SelectionPrompt<string>()
@@ -334,6 +397,11 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
                     // Reload config after Add
                     config = LoadConfig(configPath);
                     selectedProvider = null; // force prompt again loop
+                }
+                else if (selectedProvider == "Edit BYOK...")
+                {
+                    Process.Start(new ProcessStartInfo(configPath) { UseShellExecute = true });
+                    return 0;
                 }
                 else
                 {
@@ -358,31 +426,38 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         }
 
         // If model not specified, prompt
-        if (selectedModel == null)
+        ModelInfo? selectedModelInfo = null;
+
+        if (selectedModel != null)
         {
-            if (providerConfig.Models.Count == 0)
-            {
-                AnsiConsole.MarkupLine($"[red]No models configured for provider '{selectedProvider}'.[/]");
-                return 1;
-            }
-            else if (providerConfig.Models.Count == 1)
-            {
-                selectedModel = providerConfig.Models[0];
-            }
-            else
-            {
-                selectedModel = AnsiConsole.Prompt(
-                    new SelectionPrompt<string>()
-                        .Title($"Select [green]model[/] from {selectedProvider}:")
-                        .AddChoices(providerConfig.Models));
-            }
+            selectedModelInfo = providerConfig.Models.FirstOrDefault(m => m.Id == selectedModel);
+            if (selectedModelInfo == null)
+                selectedModelInfo = new ModelInfo { Id = selectedModel };
+        }
+        else if (providerConfig.Models.Count == 0)
+        {
+            AnsiConsole.MarkupLine($"[red]No models configured for provider '{selectedProvider}'.[/]");
+            return 1;
+        }
+        else if (providerConfig.Models.Count == 1)
+        {
+            selectedModelInfo = providerConfig.Models[0];
+            selectedModel = selectedModelInfo.Id;
+        }
+        else
+        {
+            selectedModelInfo = AnsiConsole.Prompt(
+                new SelectionPrompt<ModelInfo>()
+                    .Title($"Select [green]model[/] from {selectedProvider}:")
+                    .AddChoices(providerConfig.Models));
+            selectedModel = selectedModelInfo.Id;
         }
 
         AnsiConsole.MarkupLine($"[cyan]Using {selectedProvider} / {selectedModel}[/]");
 
         // Retrieve API key from credential manager
         var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
-        var credential = store.Get(selectedProvider, "apikey");
+        var credential = store.Get(providerConfig.BaseUrl, selectedProvider);
         if (credential == null)
         {
             AnsiConsole.MarkupLine($"[red]API key not found for provider '{selectedProvider}'. Run 'copilot add' to configure.[/]");
@@ -393,7 +468,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             providerConfig.Type,
             providerConfig.BaseUrl,
             credential.Password,
-            selectedModel,
+            selectedModelInfo,
             settings.RemainingArgs);
     }
 
@@ -423,7 +498,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         string? providerType,
         string? baseUrl,
         string? apiKey,
-        string? model,
+        ModelInfo? modelInfo,
         string[]? remainingArgs)
     {
         // Build arguments for copilot command
@@ -453,6 +528,8 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             startInfo.Environment["COPILOT_PROVIDER_BASE_URL"] = "";
             startInfo.Environment["COPILOT_PROVIDER_API_KEY"] = "";
             startInfo.Environment["COPILOT_MODEL"] = "";
+            startInfo.Environment["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"] = "";
+            startInfo.Environment["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"] = "";
 
             AnsiConsole.MarkupLine("[dim]Cleared BYOK environment variables[/]");
         }
@@ -462,11 +539,26 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             startInfo.Environment["COPILOT_PROVIDER_TYPE"] = providerType;
             startInfo.Environment["COPILOT_PROVIDER_BASE_URL"] = baseUrl ?? "";
             startInfo.Environment["COPILOT_PROVIDER_API_KEY"] = apiKey ?? "";
-            startInfo.Environment["COPILOT_MODEL"] = model ?? "";
+            startInfo.Environment["COPILOT_MODEL"] = modelInfo?.Id ?? "";
+
+            if (modelInfo?.MaxPromptTokens != null)
+                startInfo.Environment["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"] = modelInfo.MaxPromptTokens.ToString();
+            else
+                startInfo.Environment["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"] = "";
+
+            if (modelInfo?.MaxOutputTokens != null)
+                startInfo.Environment["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"] = modelInfo.MaxOutputTokens.ToString();
+            else
+                startInfo.Environment["COPILOT_PROVIDER_MAX_OUTPUT_TOKENS"] = "";
 
             AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_TYPE={providerType}[/]");
             AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_BASE_URL={baseUrl}[/]");
-            AnsiConsole.MarkupLine($"[dim]Set COPILOT_MODEL={model}[/]");
+            AnsiConsole.MarkupLine($"[dim]Set COPILOT_MODEL={modelInfo?.Id}[/]");
+
+            if (modelInfo?.MaxPromptTokens != null)
+                AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_MAX_PROMPT_TOKENS={modelInfo.MaxPromptTokens}[/]");
+            if (modelInfo?.MaxOutputTokens != null)
+                AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_MAX_OUTPUT_TOKENS={modelInfo.MaxOutputTokens}[/]");
         }
 
         AnsiConsole.MarkupLine($"\n[cyan]Launching: copilot {argumentString}[/]\n");
