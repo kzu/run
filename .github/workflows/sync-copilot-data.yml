@@ -53,6 +53,6 @@ jobs:
           git commit -m "Update copilot model data"
           git pull --rebase origin main
           if ! git push origin HEAD:main; then
-            echo "Push to main failed. Check workflow write permissions and branch protection settings."
+            echo "Push to main failed. Check GITHUB_TOKEN permissions and branch protection settings."
             exit 1
           fi
