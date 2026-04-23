@@ -51,8 +51,11 @@ jobs:
           git add .github/copilot.json
           git diff --cached --quiet && exit 0
           git commit -m "Update copilot model data"
-          git pull --rebase origin main
+          if ! git pull --rebase origin main; then
+            echo "Rebase onto main failed. Retry the workflow after main stabilizes."
+            exit 1
+          fi
           if ! git push origin HEAD:main; then
-            echo "Push to main failed. Check GITHUB_TOKEN permissions and branch protection settings."
+            echo "Push to main failed. Ensure GITHUB_TOKEN has contents:write and branch protections allow github-actions[bot] to push."
             exit 1
           fi
