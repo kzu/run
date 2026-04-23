@@ -40,7 +40,9 @@ jobs:
           path = Path(".github/copilot.json")
           data = json.loads(path.read_text(encoding="utf-8"))
           if not isinstance(data, (dict, list)):
-              raise SystemExit("Downloaded JSON must be an object or array.")
+              raise SystemExit(
+                  f"Downloaded JSON must be an object or array, but got {type(data).__name__}."
+              )
           PY
 
       - name: Commit and push changes
@@ -51,11 +53,17 @@ jobs:
           git add .github/copilot.json
           git diff --cached --quiet && exit 0
           git commit -m "Update copilot model data"
-          if ! git pull --rebase origin main; then
-            echo "Rebase onto main failed. Retry the workflow after main stabilizes."
-            exit 1
-          fi
-          if ! git push origin HEAD:main; then
-            echo "Push to main failed. Ensure GITHUB_TOKEN has contents:write and branch protections allow github-actions[bot] to push."
-            exit 1
-          fi
+          for attempt in 1 2 3; do
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+            elif git push origin HEAD:main; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Unable to update main after 3 attempts. Ensure GITHUB_TOKEN has contents:write and branch protections allow github-actions[bot] to push."
+              exit 1
+            fi
+
+            sleep $((attempt * 5))
+          done
