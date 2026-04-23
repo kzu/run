@@ -3,6 +3,9 @@
 // A CLI tool that lets you run GitHub Copilot with your own API keys for
 // third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
 //
+// Model IDs: Uses exact ID from /v1/models endpoint for COPILOT_MODEL (preserves
+// composite "[VENDOR]/[MODEL]" format required by NVIDIA/OpenRouter).
+//
 // First-run: 
 //   dnx runfile kzu/run:copilot.cs --alias copilot 
 //   
@@ -14,9 +17,9 @@
 //
 // Commands:
 //   run (default) - Launch Copilot with a configured BYOK provider and model.
-//                   Sets COPILOT_PROVIDER_* and COPILOT_MODEL environment variables
-//                   before spawning the `copilot` process.
-//   add           - Interactively add a new provider: pick from a remote catalogdebug.
+//                   Sets COPILOT_PROVIDER_* and COPILOT_MODEL (full original ID)
+//                   environment variables before spawning the `copilot` process.
+//   add           - Interactively add a new provider: pick from a remote catalog
 //                   (or built-in fallback list), enter/confirm the base URL, supply
 //                   an API key, and select which models to enable.
 //
@@ -945,10 +948,12 @@ static class ByokSupport
 
     private static ModelInfo EnrichModel(ModelEntry model, IReadOnlyList<OpenRouterModelMetadata> metadata)
     {
-        var parsedModel = ParseModelSlug(model.Id);
+        // Use the exact ID as originally fetched from /v1/models for COPILOT_MODEL env var.
+        // Critical for NVIDIA/OpenRouter composite IDs (e.g. "nvidia/..." or "openrouter/...").
+        // ParseModelSlug/GetCleanModelId still handle matching/display internally via CleanId/PersistedId.
         var result = new ModelInfo
         {
-            Id = string.IsNullOrWhiteSpace(parsedModel.PersistedId) ? GetCleanModelId(model.Id) : parsedModel.PersistedId,
+            Id = model.Id,
             ContextLength = model.MaxInputTokens ?? model.MaxPromptTokens ?? model.ContextLength,
         };
 

@@ -104,7 +104,7 @@ The following environment variables are set before spawning `copilot`:
 | `COPILOT_PROVIDER_TYPE` | Provider wire type (`openai` / `anthropic`) |
 | `COPILOT_PROVIDER_BASE_URL` | Provider base URL (with `/v1` suffix) |
 | `COPILOT_PROVIDER_API_KEY` | API key (from secure credential store) |
-| `COPILOT_MODEL` | Model ID |
+| `COPILOT_MODEL` | Model ID from /v1/models |
 | `COPILOT_PROVIDER_MAX_PROMPT_TOKENS` | Context length (if known) |
 | `COPILOT_PROVIDER_WIRE_API` | Wire API (`responses` or `completions`) |
 
