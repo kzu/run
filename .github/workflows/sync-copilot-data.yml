@@ -63,9 +63,10 @@ jobs:
             fi
 
             if [ "$attempt" -eq 3 ]; then
-              echo "Failed to push to main after 3 attempts. Check GITHUB_TOKEN permissions and branch protection rules."
+              echo "Failed to push to main after 3 attempts. Check workflow permissions and branch protection rules."
               exit 1
             fi
 
+            git rebase --abort || true
             sleep $((2 ** attempt))
           done
