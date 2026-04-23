@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: sync-copilot-data
+  cancel-in-progress: false
+
 jobs:
   sync:
     runs-on: ubuntu-latest
@@ -47,7 +51,8 @@ jobs:
           git add .github/copilot.json
           git diff --cached --quiet && exit 0
           git commit -m "Update copilot model data"
+          git pull --rebase origin main
           if ! git push origin HEAD:main; then
-            echo "Failed to push updated .github/copilot.json to main. Confirm GITHUB_TOKEN has contents:write, branch protections allow this workflow to push, and main has not moved ahead of this run."
+            echo "Push to main failed. Check workflow write permissions and branch protection settings."
             exit 1
           fi
