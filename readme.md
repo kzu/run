@@ -6,6 +6,13 @@ Quickly and easily run any file in this repo using .NET 10 CLI:
 dnx runfile kzu/run:file.cs
 ```
 
+## Overview
+
+ALL .cs files in this repo are intented to be edited/authored as a file-based .NET 10 app, 
+so all package references, msbuild properties and SDK MUST be placed in the same .cs file 
+instead of the project file. The project file's only purpose is to serve as a top-level program 
+selector for which to run, leveraging SmallSharp.
+
 The following are the available scripts.
 
 ## Azure KeyVault to dotnet-secrets sync
