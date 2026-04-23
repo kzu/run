@@ -3,11 +3,20 @@
 // A CLI tool that lets you run GitHub Copilot with your own API keys for
 // third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
 //
+// First-run: 
+//   dnx runfile kzu/run:copilot.cs --alias copilot 
+//   
+// Use specific SHA, branch or tag to pin version (i.e. kzu/run@main:copilot.cs or kzu/run@0ec029d80:copilot.cs)
+// Use whichever alias you want to avoid entering the full ref (or don't specify an alias at all)
+//
+// Subsequent runs: 
+//   dnx runfile copilot [script args] -- [copilot CLI args]
+//
 // Commands:
 //   run (default) - Launch Copilot with a configured BYOK provider and model.
 //                   Sets COPILOT_PROVIDER_* and COPILOT_MODEL environment variables
 //                   before spawning the `copilot` process.
-//   add           - Interactively add a new provider: pick from a remote catalog
+//   add           - Interactively add a new provider: pick from a remote catalogdebug.
 //                   (or built-in fallback list), enter/confirm the base URL, supply
 //                   an API key, and select which models to enable.
 //
@@ -301,7 +310,9 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             return LaunchCopilot(null, null, null, null, null, settings.RemainingArgs);
         }
 
-        var providerConfig = config.Providers.FirstOrDefault(p => p.Name == selectedProvider);
+        var providerConfig = config.Providers.FirstOrDefault(p =>
+            string.Equals(p.Name, selectedProvider, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.Id, selectedProvider, StringComparison.OrdinalIgnoreCase));
         if (providerConfig == null)
         {
             AnsiConsole.MarkupLine($"[red]Provider '{selectedProvider}' not found in configuration.[/]");
