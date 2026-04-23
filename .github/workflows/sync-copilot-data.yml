@@ -63,9 +63,9 @@ jobs:
             fi
 
             if [ "$attempt" -eq 3 ]; then
-              echo "Unable to update main after 3 attempts. This workflow uses the default GITHUB_TOKEN with contents:write, so check repository action permissions and branch protection rules for github-actions[bot]."
+              echo "Failed to push to main after 3 attempts. Check GITHUB_TOKEN permissions and branch protection rules."
               exit 1
             fi
 
-            sleep $((attempt * 5))
+            sleep $((2 ** attempt))
           done
