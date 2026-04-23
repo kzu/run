@@ -12,7 +12,7 @@
 //                   an API key, and select which models to enable.
 //
 // Configuration:
-//   Provider/model settings are stored in ~/.copilot/byok.json (plain JSON, no secrets).
+//   Provider/model/wire API settings are stored in ~/.copilot/byok.json (plain JSON, no secrets).
 //
 // API Key Security:
 //   API keys are never written to the config file. They are stored and retrieved
@@ -136,19 +136,26 @@ class AddCommand : AsyncCommand
                     .Secret());
         }
 
+        var configPath = ByokConfigStore.GetConfigPath();
+        var config = ByokConfigStore.LoadConfig(configPath);
+        var existingProvider = config.Providers.FirstOrDefault(p =>
+            string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
+
+        var selectedWireApi = ByokSupport.NormalizeWireApi(AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("Select [green]provider wire API[/]:")
+                .AddChoices(ByokSupport.GetSupportedWireApiChoices())
+                .DefaultValue(ByokSupport.GetWireApiDisplayName(existingProvider?.WireApi))));
+
         AnsiConsole.MarkupLine($"\n[green]✓[/] Provider: {providerName} [dim]({provider.Id})[/]");
         AnsiConsole.MarkupLine($"[green]✓[/] Type: {providerTypeKey}");
         AnsiConsole.MarkupLine($"[green]✓[/] Base URL: {baseUrl}");
+        AnsiConsole.MarkupLine($"[green]✓[/] Wire API: {ByokSupport.GetWireApiDisplayName(selectedWireApi)}");
         if (existingCredential != null)
             AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim](loaded from secure storage)[/]");
         else
             AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim]***[/]");
-
-        var configPath = GetConfigPath();
-        var config = LoadConfig(configPath);
-        var existingProvider = config.Providers.FirstOrDefault(p =>
-            string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
 
         List<ModelInfo> selectedModels = [];
 
@@ -215,17 +222,11 @@ class AddCommand : AsyncCommand
             Id = provider.Id,
             Type = providerTypeKey,
             BaseUrl = baseUrl,
+            WireApi = selectedWireApi,
             Models = selectedModels
         });
 
-        var configDir = Path.GetDirectoryName(configPath)!;
-        Directory.CreateDirectory(configDir);
-
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions
-        {
-            WriteIndented = true
-        });
-        await File.WriteAllTextAsync(configPath, json);
+        await ByokConfigStore.SaveConfigAsync(configPath, config, cancellationToken);
 
         store.AddOrUpdate(baseUrl, providerName, apiKey);
 
@@ -235,28 +236,6 @@ class AddCommand : AsyncCommand
         return 0;
     }
 
-    private static string GetConfigPath()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(home, ".copilot", "byok.json");
-    }
-
-    private static ByokConfig LoadConfig(string path)
-    {
-        if (!File.Exists(path))
-            return new ByokConfig();
-
-        try
-        {
-            var json = File.ReadAllText(path);
-            var config = JsonSerializer.Deserialize<ByokConfig>(json) ?? new ByokConfig();
-            return ByokSupport.NormalizeConfig(config);
-        }
-        catch
-        {
-            return new ByokConfig();
-        }
-    }
 }
 
 class RunCommand : AsyncCommand<RunCommand.Settings>
@@ -277,8 +256,8 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
 
     protected override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken = default(CancellationToken))
     {
-        var configPath = GetConfigPath();
-        var config = LoadConfig(configPath);
+        var configPath = ByokConfigStore.GetConfigPath();
+        var config = ByokConfigStore.LoadConfig(configPath);
 
         string? selectedProvider = settings.Provider;
         string? selectedModel = settings.Model;
@@ -301,7 +280,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
                 {
                     var addCommand = new AddCommand();
                     await addCommand.ExecuteAsync(context);
-                    config = LoadConfig(configPath);
+                    config = ByokConfigStore.LoadConfig(configPath);
                     selectedProvider = null;
                 }
                 else if (selectedProvider == "Edit BYOK...")
@@ -319,7 +298,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         if (selectedProvider == "Copilot (Default)")
         {
             AnsiConsole.MarkupLine("[cyan]Using GitHub Copilot (Default)[/]");
-            return LaunchCopilot(null, null, null, null, settings.RemainingArgs);
+            return LaunchCopilot(null, null, null, null, null, settings.RemainingArgs);
         }
 
         var providerConfig = config.Providers.FirstOrDefault(p => p.Name == selectedProvider);
@@ -375,30 +354,8 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             providerConfig.BaseUrl,
             credential.Password,
             selectedModelInfo,
+            providerConfig.WireApi,
             settings.RemainingArgs);
-    }
-
-    private static string GetConfigPath()
-    {
-        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        return Path.Combine(home, ".copilot", "byok.json");
-    }
-
-    private static ByokConfig LoadConfig(string path)
-    {
-        if (!File.Exists(path))
-            return new ByokConfig();
-
-        try
-        {
-            var json = File.ReadAllText(path);
-            var config = JsonSerializer.Deserialize<ByokConfig>(json) ?? new ByokConfig();
-            return ByokSupport.NormalizeConfig(config);
-        }
-        catch
-        {
-            return new ByokConfig();
-        }
     }
 
     private static int LaunchCopilot(
@@ -406,6 +363,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         string? baseUrl,
         string? apiKey,
         ModelInfo? modelInfo,
+        string? wireApi,
         string[]? remainingArgs)
     {
         var args = new List<string>();
@@ -432,20 +390,28 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             startInfo.Environment["COPILOT_PROVIDER_API_KEY"] = "";
             startInfo.Environment["COPILOT_MODEL"] = "";
             startInfo.Environment["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"] = "";
+            startInfo.Environment["COPILOT_PROVIDER_WIRE_API"] = "";
 
             AnsiConsole.MarkupLine("[dim]Cleared BYOK environment variables[/]");
         }
         else
         {
+            baseUrl ??= "";
+            baseUrl = baseUrl.TrimEnd('/');
+            if (!baseUrl.EndsWith("/v1"))
+                baseUrl += "/v1";
+
             startInfo.Environment["COPILOT_PROVIDER_TYPE"] = providerType;
             startInfo.Environment["COPILOT_PROVIDER_BASE_URL"] = baseUrl ?? "";
             startInfo.Environment["COPILOT_PROVIDER_API_KEY"] = apiKey ?? "";
             startInfo.Environment["COPILOT_MODEL"] = modelInfo?.Id ?? "";
             startInfo.Environment["COPILOT_PROVIDER_MAX_PROMPT_TOKENS"] = modelInfo?.ContextLength?.ToString() ?? "";
+            startInfo.Environment["COPILOT_PROVIDER_WIRE_API"] = ByokSupport.NormalizeWireApi(wireApi);
 
             AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_TYPE={providerType}[/]");
             AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_BASE_URL={baseUrl}[/]");
             AnsiConsole.MarkupLine($"[dim]Set COPILOT_MODEL={modelInfo?.Id}[/]");
+            AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_WIRE_API={ByokSupport.NormalizeWireApi(wireApi)}[/]");
 
             if (modelInfo?.ContextLength != null)
                 AnsiConsole.MarkupLine($"[dim]Set COPILOT_PROVIDER_MAX_PROMPT_TOKENS={modelInfo.ContextLength}[/]");
@@ -473,6 +439,69 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
     }
 }
 
+static class ByokConfigStore
+{
+    public static string GetConfigPath()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        return Path.Combine(home, ".copilot", "byok.json");
+    }
+
+    public static ByokConfig LoadConfig(string path)
+    {
+        if (!File.Exists(path))
+            return new ByokConfig();
+
+        try
+        {
+            var json = File.ReadAllText(path);
+            var config = JsonSerializer.Deserialize<ByokConfig>(json) ?? new ByokConfig();
+            config = ByokSupport.NormalizeConfig(config, out var changed);
+
+            if (changed)
+                SaveConfig(path, config);
+
+            return config;
+        }
+        catch (IOException ex)
+        {
+            AnsiConsole.MarkupLine($"[yellow]Could not read BYOK configuration: {Markup.Escape(ex.Message)}[/]");
+            return new ByokConfig();
+        }
+        catch (JsonException ex)
+        {
+            AnsiConsole.MarkupLine($"[yellow]Could not parse BYOK configuration: {Markup.Escape(ex.Message)}[/]");
+            return new ByokConfig();
+        }
+    }
+
+    public static void SaveConfig(string path, ByokConfig config)
+    {
+        var configDir = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(configDir);
+
+        var json = JsonSerializer.Serialize(ByokSupport.NormalizeConfig(config), new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        File.WriteAllText(path, json);
+    }
+
+    public static Task SaveConfigAsync(string path, ByokConfig config, CancellationToken cancellationToken)
+    {
+        var configDir = Path.GetDirectoryName(path)!;
+        Directory.CreateDirectory(configDir);
+
+        var json = JsonSerializer.Serialize(ByokSupport.NormalizeConfig(config), new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
+
+        return File.WriteAllTextAsync(path, json, cancellationToken);
+    }
+}
+
 #region Data Models
 
 record ByokConfig
@@ -486,6 +515,7 @@ record ProviderConfig
     public string Id { get; set; } = string.Empty;
     public string Type { get; set; } = string.Empty;
     public string BaseUrl { get; set; } = string.Empty;
+    public string WireApi { get; set; } = ByokSupport.DefaultWireApi;
     public List<ModelInfo> Models { get; set; } = [];
 }
 
@@ -545,6 +575,9 @@ static class ByokSupport
 {
     private const string ProviderCatalogUrl = "https://github.com/kzu/run/raw/refs/heads/main/.github/copilot.json";
     private const string OpenRouterModelsUrl = "https://openrouter.ai/api/v1/models";
+    public const string ResponsesWireApi = "responses";
+    public const string CompletionsWireApi = "completions";
+    public const string DefaultWireApi = ResponsesWireApi;
 
     private static readonly List<ProviderDefinition> KnownProviders =
     [
@@ -578,15 +611,48 @@ static class ByokSupport
         return [.. providers.Values.OrderBy(provider => provider.Name, StringComparer.OrdinalIgnoreCase)];
     }
 
-    public static ByokConfig NormalizeConfig(ByokConfig config)
+    public static IReadOnlyList<string> GetSupportedWireApiChoices() => ["Responses", "Completions"];
+
+    public static string GetWireApiDisplayName(string? wireApi) =>
+        NormalizeWireApi(wireApi) == CompletionsWireApi ? "Completions" : "Responses";
+
+    public static ByokConfig NormalizeConfig(ByokConfig config) => NormalizeConfig(config, out _);
+
+    public static ByokConfig NormalizeConfig(ByokConfig config, out bool changed)
     {
+        changed = false;
+
         foreach (var provider in config.Providers)
         {
-            provider.Id = InferProviderId(provider);
-            provider.BaseUrl = NormalizeBaseUrl(provider.BaseUrl);
+            var providerId = InferProviderId(provider);
+            if (!string.Equals(provider.Id, providerId, StringComparison.OrdinalIgnoreCase))
+            {
+                provider.Id = providerId;
+                changed = true;
+            }
+
+            var baseUrl = NormalizeBaseUrl(provider.BaseUrl);
+            if (!string.Equals(provider.BaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                provider.BaseUrl = baseUrl;
+                changed = true;
+            }
+
+            var wireApi = NormalizeWireApi(provider.WireApi);
+            if (!string.Equals(provider.WireApi, wireApi, StringComparison.Ordinal))
+            {
+                provider.WireApi = wireApi;
+                changed = true;
+            }
         }
+
         return config;
     }
+
+    public static string NormalizeWireApi(string? wireApi) =>
+        string.Equals(wireApi, CompletionsWireApi, StringComparison.OrdinalIgnoreCase)
+            ? CompletionsWireApi
+            : ResponsesWireApi;
 
     public static async Task<List<ModelInfo>> FetchModelsAsync(string baseUrl, string apiKey, string providerType)
     {
