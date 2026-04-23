@@ -38,6 +38,76 @@ The summary of the run shows what action was taken for each secret:
 The updated secrets JSON is formatted with nested sections as appropriate 
 for easier reading/editing.
 
+## GitHub Copilot BYOK launcher
+
+```pwsh
+dnx runfile kzu/run:copilot.cs
+```
+
+Runs [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) 
+with your own API keys for third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
+
+### First run / alias setup
+
+```pwsh
+dnx runfile kzu/run@main:copilot.cs --alias copilot
+```
+
+Use specific SHA, branch or tag to pin version (i.e. `kzu/run@main:copilot.cs` or `kzu/run@0ec029d80:copilot.cs`)
+After aliasing, subsequent invocations are simply:
+
+```pwsh
+dnx runfile copilot [script args] -- [copilot CLI args]
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `run` *(default)* | Launch Copilot with a configured BYOK provider and model |
+| `add` | Interactively add a new provider from a remote catalog |
+
+```pwsh
+# launch interactively (pick provider + model)
+dnx runfile copilot
+
+# launch with a specific provider and model
+dnx runfile copilot --provider xai --model grok-4.20-reasoning
+
+# add a new provider
+dnx runfile copilot add
+
+# pass extra arguments straight through to the copilot CLI
+dnx runfile copilot -- chat -m "hello"
+```
+
+### Configuration
+
+Provider, model, and wire-API settings are stored in `~/.copilot/byok.json`.
+
+API keys are **never** written to disk. They are stored and retrieved via 
+[Git Credential Manager](https://github.com/git-ecosystem/git-credential-manager), 
+which delegates to the OS-native credential store:
+
+- **Windows** — Windows Credential Manager (DPAPI-encrypted)
+- **macOS** — Keychain
+- **Linux** — libsecret / GPG-encrypted store
+
+At runtime the key is passed to the `copilot` child process exclusively through 
+the `COPILOT_PROVIDER_API_KEY` environment variable — it is never logged or 
+persisted to disk.
+
+The following environment variables are set before spawning `copilot`:
+
+| Variable | Value |
+|----------|-------|
+| `COPILOT_PROVIDER_TYPE` | Provider wire type (`openai` / `anthropic`) |
+| `COPILOT_PROVIDER_BASE_URL` | Provider base URL (with `/v1` suffix) |
+| `COPILOT_PROVIDER_API_KEY` | API key (from secure credential store) |
+| `COPILOT_MODEL` | Model ID |
+| `COPILOT_PROVIDER_MAX_PROMPT_TOKENS` | Context length (if known) |
+| `COPILOT_PROVIDER_WIRE_API` | Wire API (`responses` or `completions`) |
+
 ## Clean bin/obj recursively
 
 ```pwsh
