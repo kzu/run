@@ -26,6 +26,21 @@ jobs:
             https://artificialanalysis.ai/api/v2/data/llms/models \
             > .github/copilot.json
 
+      - name: Validate downloaded JSON
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path(".github/copilot.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if not data:
+              raise SystemExit("Downloaded JSON is empty.")
+          if not isinstance(data, (dict, list)):
+              raise SystemExit("Downloaded JSON must be an object or array.")
+          PY
+
       - name: Commit and push changes
         run: |
           set -euo pipefail
@@ -34,4 +49,7 @@ jobs:
           git add .github/copilot.json
           git diff --cached --quiet && exit 0
           git commit -m "Update copilot model data"
-          git push origin HEAD:main
+          if ! git push origin HEAD:main; then
+            echo "Failed to push updated .github/copilot.json to main. Check branch protections or retry after syncing with the latest main."
+            exit 1
+          fi
