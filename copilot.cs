@@ -474,7 +474,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         {
             baseUrl ??= "";
             baseUrl = baseUrl.TrimEnd('/');
-            if (!baseUrl.EndsWith("/v1"))
+            if (providerType != "anthropic" && !baseUrl.EndsWith("/v1"))
                 baseUrl += "/v1";
 
             startInfo.Environment["COPILOT_PROVIDER_TYPE"] = providerType;
