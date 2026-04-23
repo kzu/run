@@ -265,6 +265,11 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
 
     protected override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken = default(CancellationToken))
     {
+        // Passthrough mode: we were launched by a BYOK-configured wrapper instance of this script.
+        // The COPILOT_PROVIDER_* env vars are already set in our environment; just forward to the real binary.
+        if (Environment.GetEnvironmentVariable("COPILOT_BYOK_LAUNCHED") == "1")
+            return LaunchRealCopilot(settings.RemainingArgs);
+
         var configPath = ByokConfigStore.GetConfigPath();
         var config = ByokConfigStore.LoadConfig(configPath);
 
@@ -369,6 +374,63 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             settings.RemainingArgs);
     }
 
+    // Launched in passthrough mode: BYOK env vars are already in the current environment.
+    // Find and exec the real copilot binary so it inherits them.
+    private static int LaunchRealCopilot(string[]? remainingArgs)
+    {
+        var copilotPath = FindRealCopilotPath();
+        var args = remainingArgs?.Where(a => a != "--").ToList() ?? [];
+        var argumentString = string.Join(" ", args);
+
+        try
+        {
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = copilotPath,
+                Arguments = argumentString,
+                UseShellExecute = false,
+            });
+
+            if (process == null)
+            {
+                AnsiConsole.MarkupLine("[red]Failed to start copilot process.[/]");
+                return 1;
+            }
+
+            process.WaitForExit();
+            return process.ExitCode;
+        }
+        catch (Exception ex)
+        {
+            AnsiConsole.MarkupLine($"[red]Error launching copilot: {ex.Message}[/]");
+            return 1;
+        }
+    }
+
+    // Finds the real copilot binary, skipping the dnx shim (which is a .cmd on Windows).
+    // Override with the COPILOT_CLI_PATH environment variable if auto-detection fails.
+    private static string FindRealCopilotPath()
+    {
+        var explicitPath = Environment.GetEnvironmentVariable("COPILOT_CLI_PATH");
+        if (!string.IsNullOrWhiteSpace(explicitPath))
+            return explicitPath;
+
+        if (OperatingSystem.IsWindows())
+        {
+            var pathDirs = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator);
+            foreach (var dir in pathDirs)
+            {
+                if (string.IsNullOrWhiteSpace(dir))
+                    continue;
+                var exePath = Path.Combine(dir.Trim(), "copilot.exe");
+                if (File.Exists(exePath))
+                    return exePath;
+            }
+        }
+
+        return "copilot";
+    }
+
     private static int LaunchCopilot(
         string? providerType,
         string? baseUrl,
@@ -393,6 +455,9 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             Arguments = argumentString,
             UseShellExecute = false
         };
+
+        // Mark the child so it knows it was launched by us and should not show the provider picker.
+        startInfo.Environment["COPILOT_BYOK_LAUNCHED"] = "1";
 
         if (providerType == null)
         {
