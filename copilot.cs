@@ -129,7 +129,7 @@ class AddCommand : AsyncCommand
 
         var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
         var existingCredential = ByokSupport.GetCredentialLookupUrls(baseUrl)
-            .Select(url => store.Get(url, providerName))
+            .SelectMany(url => new[] { store.Get(url, provider.Id), store.Get(url, providerName) })
             .FirstOrDefault(credential => credential != null);
 
         string apiKey;
@@ -237,7 +237,7 @@ class AddCommand : AsyncCommand
 
         await ByokConfigStore.SaveConfigAsync(configPath, config, cancellationToken);
 
-        store.AddOrUpdate(baseUrl, providerName, apiKey);
+        store.AddOrUpdate(baseUrl, provider.Id, apiKey);
 
         AnsiConsole.MarkupLine($"[green]✓[/] Configuration saved to {configPath}");
         AnsiConsole.MarkupLine("[green]✓[/] API key saved securely");
@@ -352,7 +352,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
 
         var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
         var credential = ByokSupport.GetCredentialLookupUrls(providerConfig.BaseUrl)
-            .Select(url => store.Get(url, selectedProvider))
+            .SelectMany(url => new[] { store.Get(url, providerConfig.Id), store.Get(url, providerConfig.Name) })
             .FirstOrDefault(found => found != null);
         if (credential == null)
         {
