@@ -1,0 +1,72 @@
+name: Sync Copilot model data
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-copilot-data
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Download latest model data
+        run: |
+          set -euo pipefail
+          mkdir -p .github
+          curl --fail --silent --show-error \
+            -H "x-api-key: ${{ secrets.ARTIFICIAL_ANALYSIS_KEY }}" \
+            https://artificialanalysis.ai/api/v2/data/llms/models \
+            > .github/copilot.json
+
+      - name: Validate downloaded JSON
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path(".github/copilot.json")
+          data = json.loads(path.read_text(encoding="utf-8"))
+          if not isinstance(data, (dict, list)):
+              raise SystemExit(
+                  f"Downloaded JSON must be an object or array, but got {type(data).__name__}."
+              )
+          PY
+
+      - name: Commit and push changes
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/copilot.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Update copilot model data"
+          for attempt in 1 2 3; do
+            if ! git pull --rebase origin main; then
+              git rebase --abort || true
+            else
+              if git push origin HEAD:main; then
+                exit 0
+              fi
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "Failed to push to main after 3 attempts. Check workflow permissions and branch protection rules."
+              exit 1
+            fi
+
+            git rebase --abort || true
+            sleep $((2 ** attempt))
+          done
