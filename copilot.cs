@@ -268,10 +268,12 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
 
     protected override async Task<int> ExecuteAsync([NotNull] CommandContext context, [NotNull] Settings settings, CancellationToken cancellationToken = default(CancellationToken))
     {
+        var remainingArgs = (settings.RemainingArgs ?? []).Concat(context.Remaining.Raw).ToArray();
+
         // Passthrough mode: we were launched by a BYOK-configured wrapper instance of this script.
         // The COPILOT_PROVIDER_* env vars are already set in our environment; just forward to the real binary.
         if (Environment.GetEnvironmentVariable("COPILOT_BYOK_LAUNCHED") == "1")
-            return LaunchRealCopilot(settings.RemainingArgs);
+            return LaunchRealCopilot(remainingArgs);
 
         var configPath = ByokConfigStore.GetConfigPath();
         var config = ByokConfigStore.LoadConfig(configPath);
@@ -315,7 +317,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
         if (selectedProvider == "Copilot (Default)")
         {
             AnsiConsole.MarkupLine("[cyan]Using GitHub Copilot (Default)[/]");
-            return LaunchCopilot(null, null, null, null, null, settings.RemainingArgs);
+            return LaunchCopilot(null, null, null, null, null, remainingArgs);
         }
 
         var providerConfig = config.Providers.FirstOrDefault(p =>
@@ -374,7 +376,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
             credential.Password,
             selectedModelInfo,
             providerConfig.WireApi,
-            settings.RemainingArgs);
+            remainingArgs);
     }
 
     // Launched in passthrough mode: BYOK env vars are already in the current environment.
