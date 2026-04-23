@@ -56,12 +56,14 @@ jobs:
           for attempt in 1 2 3; do
             if ! git pull --rebase origin main; then
               git rebase --abort || true
-            elif git push origin HEAD:main; then
-              exit 0
+            else
+              if git push origin HEAD:main; then
+                exit 0
+              fi
             fi
 
             if [ "$attempt" -eq 3 ]; then
-              echo "Unable to update main after 3 attempts. Ensure GITHUB_TOKEN has contents:write and branch protections allow github-actions[bot] to push."
+              echo "Unable to update main after 3 attempts. This workflow uses the default GITHUB_TOKEN with contents:write, so check repository action permissions and branch protection rules for github-actions[bot]."
               exit 1
             fi
 
