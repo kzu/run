@@ -882,7 +882,6 @@ static class ByokSupport
             result.ContextLength ??= match.ContextLength;
         }
 
-        Debug.Assert(result.ContextLength != null, $"{model.Id} has no context length");
         return result;
     }
 
