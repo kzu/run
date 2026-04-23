@@ -35,8 +35,6 @@ jobs:
 
           path = Path(".github/copilot.json")
           data = json.loads(path.read_text(encoding="utf-8"))
-          if not data:
-              raise SystemExit("Downloaded JSON is empty.")
           if not isinstance(data, (dict, list)):
               raise SystemExit("Downloaded JSON must be an object or array.")
           PY
@@ -50,6 +48,6 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "Update copilot model data"
           if ! git push origin HEAD:main; then
-            echo "Failed to push updated .github/copilot.json to main. Check branch protections or retry after syncing with the latest main."
+            echo "Failed to push updated .github/copilot.json to main. Confirm GITHUB_TOKEN has contents:write, branch protections allow this workflow to push, and main has not moved ahead of this run."
             exit 1
           fi
