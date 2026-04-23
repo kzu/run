@@ -53,6 +53,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -60,6 +62,9 @@ using System.Threading.Tasks;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using CommandContext = Spectre.Console.Cli.CommandContext;
+
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+    Console.InputEncoding = Console.OutputEncoding = Encoding.UTF8;
 
 var app = new CommandApp();
 
@@ -100,152 +105,175 @@ class AddCommand : AsyncCommand
             providerDefinitions = ByokSupport.GetFallbackProviderDefinitions();
         }
 
-        var provider = AnsiConsole.Prompt(
-            new SelectionPrompt<ProviderDefinition>()
-                .Title("Select [green]provider[/]:")
-                .AddChoices(providerDefinitions));
+        var backProvider = new ProviderDefinition("← Back", "←back");
+        var backModel = new ModelInfo { Id = "← Back" };
 
-        var providerTypeKey = provider.Type;
-        var defaultBaseUrl = provider.DefaultBaseUrl;
-
-        var baseUrl = AnsiConsole.Prompt(
-            new TextPrompt<string>("Enter [green]Base URL[/]:")
-                .DefaultValue(defaultBaseUrl)
-                .AllowEmpty());
-
-        if (string.IsNullOrWhiteSpace(baseUrl))
-            baseUrl = defaultBaseUrl;
-
-        baseUrl = ByokSupport.NormalizeBaseUrl(baseUrl);
-
-        // Preserve custom aliases when the user overrides a known default endpoint.
-        var providerName = provider.Name;
-        var needsFriendlyName = !string.IsNullOrWhiteSpace(defaultBaseUrl) &&
-            !string.Equals(baseUrl, ByokSupport.NormalizeBaseUrl(defaultBaseUrl), StringComparison.OrdinalIgnoreCase);
-
-        if (needsFriendlyName)
+        while (true)
         {
-            providerName = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter [green]friendly name[/] for this provider:")
-                    .DefaultValue(provider.Name));
-        }
+            var providerChoices = new List<ProviderDefinition> { backProvider };
+            providerChoices.AddRange(providerDefinitions);
 
-        var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
-        var existingCredential = ByokSupport.GetCredentialLookupUrls(baseUrl)
-            .SelectMany(url => new[] { store.Get(url, provider.Id), store.Get(url, providerName) })
-            .FirstOrDefault(credential => credential != null);
+            var provider = AnsiConsole.Prompt(
+                new SelectionPrompt<ProviderDefinition>()
+                    .Title("Select [green]provider[/]:")
+                    .UseConverter(p => p.Id == backProvider.Id ? "← Back" : p.ToString())
+                    .AddChoices(providerChoices));
 
-        string apiKey;
-        if (existingCredential != null)
-        {
-            AnsiConsole.MarkupLine($"\n[green]✓[/] Found existing API key for [cyan]{providerName}[/]");
-            apiKey = existingCredential.Password;
-        }
-        else
-        {
-            apiKey = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter [green]API Key[/]:")
-                    .Secret());
-        }
+            if (provider.Id == backProvider.Id)
+                return 0;
 
-        var configPath = ByokConfigStore.GetConfigPath();
-        var config = ByokConfigStore.LoadConfig(configPath);
-        var existingProvider = config.Providers.FirstOrDefault(p =>
-            string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
-            string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
+            var providerTypeKey = provider.Type;
+            var defaultBaseUrl = provider.DefaultBaseUrl;
 
-        var selectedWireApi = ByokSupport.NormalizeWireApi(AnsiConsole.Prompt(
-            new SelectionPrompt<string>()
-                .Title("Select [green]provider wire API[/]:")
-                .AddChoices(ByokSupport.GetSupportedWireApiChoices())
-                .DefaultValue(ByokSupport.GetWireApiDisplayName(existingProvider?.WireApi))));
+            var baseUrl = AnsiConsole.Prompt(
+                new TextPrompt<string>("Enter [green]Base URL[/]:")
+                    .DefaultValue(defaultBaseUrl)
+                    .AllowEmpty());
 
-        AnsiConsole.MarkupLine($"\n[green]✓[/] Provider: {providerName} [dim]({provider.Id})[/]");
-        AnsiConsole.MarkupLine($"[green]✓[/] Type: {providerTypeKey}");
-        AnsiConsole.MarkupLine($"[green]✓[/] Base URL: {baseUrl}");
-        AnsiConsole.MarkupLine($"[green]✓[/] Wire API: {ByokSupport.GetWireApiDisplayName(selectedWireApi)}");
-        if (existingCredential != null)
-            AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim](loaded from secure storage)[/]");
-        else
-            AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim]***[/]");
+            if (string.IsNullOrWhiteSpace(baseUrl))
+                baseUrl = defaultBaseUrl;
 
-        List<ModelInfo> selectedModels = [];
+            baseUrl = ByokSupport.NormalizeBaseUrl(baseUrl);
 
-        if (!string.IsNullOrWhiteSpace(baseUrl))
-        {
-            AnsiConsole.MarkupLine("\n[yellow]Fetching available models...[/]");
+            // Preserve custom aliases when the user overrides a known default endpoint.
+            var providerName = provider.Name;
+            var needsFriendlyName = !string.IsNullOrWhiteSpace(defaultBaseUrl) &&
+                !string.Equals(baseUrl, ByokSupport.NormalizeBaseUrl(defaultBaseUrl), StringComparison.OrdinalIgnoreCase);
 
-            var models = await AnsiConsole.Status()
-                .StartAsync("Querying model specifications...", async _ =>
-                {
-                    return await ByokSupport.FetchModelsAsync(baseUrl, apiKey, providerTypeKey);
-                });
-
-            if (models.Count > 0)
+            if (needsFriendlyName)
             {
-                var selectionPrompt = new MultiSelectionPrompt<ModelInfo>()
-                    .Title("Select [green]models[/] to use:")
-                    .PageSize(10)
-                    .MoreChoicesText("[grey](Move up and down to reveal more models)[/]")
-                    .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]");
+                providerName = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Enter [green]friendly name[/] for this provider:")
+                        .DefaultValue(provider.Name));
+            }
 
-                foreach (var model in models)
-                {
-                    var choice = selectionPrompt.AddChoice(model);
-                    if (existingProvider != null && existingProvider.Models.Any(existing => ByokSupport.ModelIdsMatch(existing.Id, model.Id)))
-                        choice.Select();
-                }
+            var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
+            var existingCredential = ByokSupport.GetCredentialLookupUrls(baseUrl)
+                .SelectMany(url => new[] { store.Get(url, provider.Id), store.Get(url, providerName) })
+                .FirstOrDefault(credential => credential != null);
 
-                selectedModels = AnsiConsole.Prompt(selectionPrompt);
-                AnsiConsole.MarkupLine($"[green]✓[/] Selected {selectedModels.Count} model(s)");
+            string apiKey;
+            if (existingCredential != null)
+            {
+                AnsiConsole.MarkupLine($"\n[green]✓[/] Found existing API key for [cyan]{providerName}[/]");
+                apiKey = existingCredential.Password;
             }
             else
             {
-                AnsiConsole.MarkupLine("[red]Could not fetch models from endpoint.[/]");
+                apiKey = AnsiConsole.Prompt(
+                    new TextPrompt<string>("Enter [green]API Key[/]:")
+                        .Secret());
+            }
 
+            var configPath = ByokConfigStore.GetConfigPath();
+            var config = ByokConfigStore.LoadConfig(configPath);
+            var existingProvider = config.Providers.FirstOrDefault(p =>
+                string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase));
+
+            var selectedWireApi = ByokSupport.NormalizeWireApi(AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("Select [green]provider wire API[/]:")
+                    .AddChoices(ByokSupport.GetSupportedWireApiChoices())
+                    .DefaultValue(ByokSupport.GetWireApiDisplayName(existingProvider?.WireApi))));
+
+            AnsiConsole.MarkupLine($"\n[green]✓[/] Provider: {providerName} [dim]({provider.Id})[/]");
+            AnsiConsole.MarkupLine($"[green]✓[/] Type: {providerTypeKey}");
+            AnsiConsole.MarkupLine($"[green]✓[/] Base URL: {baseUrl}");
+            AnsiConsole.MarkupLine($"[green]✓[/] Wire API: {ByokSupport.GetWireApiDisplayName(selectedWireApi)}");
+            if (existingCredential != null)
+                AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim](loaded from secure storage)[/]");
+            else
+                AnsiConsole.MarkupLine("[green]✓[/] API Key: [dim]***[/]");
+
+            List<ModelInfo> selectedModels = [];
+
+            if (!string.IsNullOrWhiteSpace(baseUrl))
+            {
+                AnsiConsole.MarkupLine("\n[yellow]Fetching available models...[/]");
+
+                var models = await AnsiConsole.Status()
+                    .StartAsync("Querying model specifications...", async _ =>
+                    {
+                        return await ByokSupport.FetchModelsAsync(baseUrl, apiKey, providerTypeKey);
+                    });
+
+                if (models.Count > 0)
+                {
+                    var selectionPrompt = new MultiSelectionPrompt<ModelInfo>()
+                        .Title("Select [green]models[/] to use:")
+                        .PageSize(10)
+                        .MoreChoicesText("[grey](Move up and down to reveal more models)[/]")
+                        .InstructionsText("[grey](Press [blue]<space>[/] to toggle, [green]<enter>[/] to accept)[/]")
+                        .UseConverter(m => m.Id == backModel.Id ? "← Back" : m.ToString());
+
+                    selectionPrompt.AddChoice(backModel);
+
+                    foreach (var model in models)
+                    {
+                        var choice = selectionPrompt.AddChoice(model);
+                        if (existingProvider != null && existingProvider.Models.Any(existing => ByokSupport.ModelIdsMatch(existing.Id, model.Id)))
+                            choice.Select();
+                    }
+
+                    selectedModels = AnsiConsole.Prompt(selectionPrompt);
+
+                    if (selectedModels.Any(m => m.Id == backModel.Id))
+                    {
+                        selectedModels.Clear();
+                        continue;
+                    }
+
+                    AnsiConsole.MarkupLine($"[green]✓[/] Selected {selectedModels.Count} model(s)");
+                }
+                else
+                {
+                    AnsiConsole.MarkupLine("[red]Could not fetch models from endpoint.[/]");
+
+                    var manualModel = AnsiConsole.Prompt(
+                        new TextPrompt<string>("Enter [green]model name[/] manually:")
+                            .AllowEmpty());
+
+                    if (!string.IsNullOrWhiteSpace(manualModel))
+                        selectedModels.Add(new ModelInfo { Id = manualModel });
+                }
+            }
+            else
+            {
                 var manualModel = AnsiConsole.Prompt(
-                    new TextPrompt<string>("Enter [green]model name[/] manually:")
+                    new TextPrompt<string>("Enter [green]model name[/]:")
                         .AllowEmpty());
 
                 if (!string.IsNullOrWhiteSpace(manualModel))
                     selectedModels.Add(new ModelInfo { Id = manualModel });
             }
+
+            AnsiConsole.MarkupLine("\n[yellow]Saving configuration...[/]");
+
+            config.Providers.RemoveAll(p =>
+                string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
+                (string.Equals(providerName, provider.Name, StringComparison.OrdinalIgnoreCase) &&
+                 string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase)));
+
+            config.Providers.Add(new ProviderConfig
+            {
+                Name = providerName,
+                Id = provider.Id,
+                Type = providerTypeKey,
+                BaseUrl = baseUrl,
+                WireApi = selectedWireApi,
+                Models = selectedModels
+            });
+
+            await ByokConfigStore.SaveConfigAsync(configPath, config, cancellationToken);
+
+            store.AddOrUpdate(baseUrl, provider.Id, apiKey);
+
+            AnsiConsole.MarkupLine($"[green]✓[/] Configuration saved to {configPath}");
+            AnsiConsole.MarkupLine("[green]✓[/] API key saved securely");
+
+            return 0;
         }
-        else
-        {
-            var manualModel = AnsiConsole.Prompt(
-                new TextPrompt<string>("Enter [green]model name[/]:")
-                    .AllowEmpty());
-
-            if (!string.IsNullOrWhiteSpace(manualModel))
-                selectedModels.Add(new ModelInfo { Id = manualModel });
-        }
-
-        AnsiConsole.MarkupLine("\n[yellow]Saving configuration...[/]");
-
-        config.Providers.RemoveAll(p =>
-            string.Equals(p.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
-            (string.Equals(providerName, provider.Name, StringComparison.OrdinalIgnoreCase) &&
-             string.Equals(p.Id, provider.Id, StringComparison.OrdinalIgnoreCase)));
-
-        config.Providers.Add(new ProviderConfig
-        {
-            Name = providerName,
-            Id = provider.Id,
-            Type = providerTypeKey,
-            BaseUrl = baseUrl,
-            WireApi = selectedWireApi,
-            Models = selectedModels
-        });
-
-        await ByokConfigStore.SaveConfigAsync(configPath, config, cancellationToken);
-
-        store.AddOrUpdate(baseUrl, provider.Id, apiKey);
-
-        AnsiConsole.MarkupLine($"[green]✓[/] Configuration saved to {configPath}");
-        AnsiConsole.MarkupLine("[green]✓[/] API key saved securely");
-
-        return 0;
     }
 
 }
@@ -283,6 +311,7 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
 
         if (selectedProvider == null)
         {
+            // Interactive mode: loop allows back-navigation between screens.
             while (true)
             {
                 var providerChoices = new List<string> { "Copilot (Default)" };
@@ -301,81 +330,147 @@ class RunCommand : AsyncCommand<RunCommand.Settings>
                     await addCommand.ExecuteAsync(context);
                     config = ByokConfigStore.LoadConfig(configPath);
                     selectedProvider = null;
+                    continue;
                 }
-                else if (selectedProvider == "Edit BYOK...")
+
+                if (selectedProvider == "Edit BYOK...")
                 {
                     Process.Start(new ProcessStartInfo(configPath) { UseShellExecute = true });
                     return 0;
                 }
+
+                if (selectedProvider == "Copilot (Default)")
+                {
+                    AnsiConsole.MarkupLine("[cyan]Using GitHub Copilot (Default)[/]");
+                    return LaunchCopilot(null, null, null, null, null, remainingArgs);
+                }
+
+                var providerConfig = config.Providers.FirstOrDefault(p =>
+                    string.Equals(p.Name, selectedProvider, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(p.Id, selectedProvider, StringComparison.OrdinalIgnoreCase));
+                if (providerConfig == null)
+                {
+                    AnsiConsole.MarkupLine($"[red]Provider '{selectedProvider}' not found in configuration.[/]");
+                    return 1;
+                }
+
+                ModelInfo? selectedModelInfo = null;
+
+                if (providerConfig.Models.Count == 0)
+                {
+                    AnsiConsole.MarkupLine($"[red]No models configured for provider '{selectedProvider}'.[/]");
+                    return 1;
+                }
+                else if (providerConfig.Models.Count == 1)
+                {
+                    selectedModelInfo = providerConfig.Models[0];
+                    selectedModel = selectedModelInfo.Id;
+                }
                 else
                 {
-                    break;
+                    var backSentinel = new ModelInfo { Id = "← Back" };
+                    var modelChoices = new List<ModelInfo> { backSentinel };
+                    modelChoices.AddRange(providerConfig.Models);
+
+                    selectedModelInfo = AnsiConsole.Prompt(
+                        new SelectionPrompt<ModelInfo>()
+                            .Title($"Select [green]model[/] from {selectedProvider}:")
+                            .AddChoices(modelChoices));
+
+                    if (selectedModelInfo.Id == "← Back")
+                    {
+                        selectedProvider = null;
+                        continue;
+                    }
+
+                    selectedModel = selectedModelInfo.Id;
                 }
+
+                AnsiConsole.MarkupLine($"[cyan]Using {selectedProvider} / {selectedModel}[/]");
+
+                var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
+                var credential = ByokSupport.GetCredentialLookupUrls(providerConfig.BaseUrl)
+                    .SelectMany(url => new[] { store.Get(url, providerConfig.Id), store.Get(url, providerConfig.Name) })
+                    .FirstOrDefault(found => found != null);
+                if (credential == null)
+                {
+                    AnsiConsole.MarkupLine($"[red]API key not found for provider '{selectedProvider}'. Run 'copilot add' to configure.[/]");
+                    return 1;
+                }
+
+                return LaunchCopilot(
+                    providerConfig.Type,
+                    providerConfig.BaseUrl,
+                    credential.Password,
+                    selectedModelInfo,
+                    providerConfig.WireApi,
+                    remainingArgs);
             }
         }
 
+        // CLI mode: --provider was specified, no back-navigation needed.
         if (selectedProvider == "Copilot (Default)")
         {
             AnsiConsole.MarkupLine("[cyan]Using GitHub Copilot (Default)[/]");
             return LaunchCopilot(null, null, null, null, null, remainingArgs);
         }
 
-        var providerConfig = config.Providers.FirstOrDefault(p =>
+        var cliProviderConfig = config.Providers.FirstOrDefault(p =>
             string.Equals(p.Name, selectedProvider, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(p.Id, selectedProvider, StringComparison.OrdinalIgnoreCase));
-        if (providerConfig == null)
+        if (cliProviderConfig == null)
         {
             AnsiConsole.MarkupLine($"[red]Provider '{selectedProvider}' not found in configuration.[/]");
             return 1;
         }
 
-        ModelInfo? selectedModelInfo = null;
+        ModelInfo? cliSelectedModelInfo = null;
 
         if (selectedModel != null)
         {
-            selectedModelInfo = ByokSupport.FindMatchingModel(providerConfig.Models, selectedModel);
-            if (selectedModelInfo == null)
-                selectedModelInfo = new ModelInfo { Id = selectedModel };
+            cliSelectedModelInfo = ByokSupport.FindMatchingModel(cliProviderConfig.Models, selectedModel);
+            if (cliSelectedModelInfo == null)
+                cliSelectedModelInfo = new ModelInfo { Id = selectedModel };
             else
-                selectedModel = selectedModelInfo.Id;
+                selectedModel = cliSelectedModelInfo.Id;
         }
-        else if (providerConfig.Models.Count == 0)
+        else if (cliProviderConfig.Models.Count == 0)
         {
             AnsiConsole.MarkupLine($"[red]No models configured for provider '{selectedProvider}'.[/]");
             return 1;
         }
-        else if (providerConfig.Models.Count == 1)
+        else if (cliProviderConfig.Models.Count == 1)
         {
-            selectedModelInfo = providerConfig.Models[0];
-            selectedModel = selectedModelInfo.Id;
+            cliSelectedModelInfo = cliProviderConfig.Models[0];
+            selectedModel = cliSelectedModelInfo.Id;
         }
         else
         {
-            selectedModelInfo = AnsiConsole.Prompt(
+            cliSelectedModelInfo = AnsiConsole.Prompt(
                 new SelectionPrompt<ModelInfo>()
                     .Title($"Select [green]model[/] from {selectedProvider}:")
-                    .AddChoices(providerConfig.Models));
-            selectedModel = selectedModelInfo.Id;
+                    .AddChoices(cliProviderConfig.Models));
+            selectedModel = cliSelectedModelInfo.Id;
         }
 
         AnsiConsole.MarkupLine($"[cyan]Using {selectedProvider} / {selectedModel}[/]");
 
-        var store = GitCredentialManager.CredentialManager.Create("copilot-byok");
-        var credential = ByokSupport.GetCredentialLookupUrls(providerConfig.BaseUrl)
-            .SelectMany(url => new[] { store.Get(url, providerConfig.Id), store.Get(url, providerConfig.Name) })
+        var cliStore = GitCredentialManager.CredentialManager.Create("copilot-byok");
+        var cliCredential = ByokSupport.GetCredentialLookupUrls(cliProviderConfig.BaseUrl)
+            .SelectMany(url => new[] { cliStore.Get(url, cliProviderConfig.Id), cliStore.Get(url, cliProviderConfig.Name) })
             .FirstOrDefault(found => found != null);
-        if (credential == null)
+        if (cliCredential == null)
         {
             AnsiConsole.MarkupLine($"[red]API key not found for provider '{selectedProvider}'. Run 'copilot add' to configure.[/]");
             return 1;
         }
 
         return LaunchCopilot(
-            providerConfig.Type,
-            providerConfig.BaseUrl,
-            credential.Password,
-            selectedModelInfo,
-            providerConfig.WireApi,
+            cliProviderConfig.Type,
+            cliProviderConfig.BaseUrl,
+            cliCredential.Password,
+            cliSelectedModelInfo,
+            cliProviderConfig.WireApi,
             remainingArgs);
     }
 
