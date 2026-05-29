@@ -108,6 +108,52 @@ The following environment variables are set before spawning `copilot`:
 | `COPILOT_PROVIDER_MAX_PROMPT_TOKENS` | Context length (if known) |
 | `COPILOT_PROVIDER_WIRE_API` | Wire API (`responses` or `completions`) |
 
+## Text-to-Speech CLI (xAI TTS)
+
+```pwsh
+dnx runfile kzu/run:tts.cs
+```
+
+Generates high-quality MP3 audio from text using the [xAI Text-to-Speech API](https://docs.x.ai/developers/model-capabilities/audio/text-to-speech) 
+via bidirectional WebSocket. No character limit (unlike REST APIs); supports multiple utterances streamed 
+to a single MP3 file.
+
+### Usage
+
+```pwsh
+# Synthesize text directly
+tts -t "Hello from xAI" -o hello.mp3
+
+# Read from a file
+tts -f input.txt -o speech.mp3 -v rex
+
+# Pipe text via stdin
+echo "Hello world" | tts -o output.mp3
+
+# Specify voice and language
+tts -t "Bonjour" -o french.mp3 -v ara -l fr
+```
+
+### Arguments
+
+| Argument | Short | Description |
+|----------|-------|-------------|
+| `--text` | `-t` | Text to synthesize. Reads from stdin when omitted. No length limit. |
+| `--file` | `-f` | Path to UTF-8 text file to read as input (alternative to `-t` or stdin). |
+| `--output` | `-o` | Output MP3 file path. Directories are created if needed. Default: `speech.mp3` |
+| `--voice` | `-v` | Voice ID: `rex` (default), `eve`, `ara`, `sal`, `leo`, or custom voice ID. |
+| `--language` | `-l` | BCP-47 language code (e.g. `en`, `fr`, `zh`, `pt-BR`) or `auto`. Default: `en` |
+
+### Setup
+
+Set the `XAI_API_KEY` environment variable with your xAI API key:
+
+```pwsh
+$env:XAI_API_KEY = "your-api-key-here"
+```
+
+Get an API key at [https://console.x.ai/team/default/api-keys](https://console.x.ai/team/default/api-keys).
+
 ## Clean bin/obj recursively
 
 ```pwsh
