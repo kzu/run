@@ -19,7 +19,7 @@ env:
   MSBUILDTERMINALLOGGER: off
   Configuration: ${{ github.event.inputs.configuration || 'Release' }}
   GH_TOKEN: ${{ secrets.GH_TOKEN }}
-  SLEET_FEED_URL: ${{ vars.SLEET_FEED_URL }}
+  SLEET_FEED_URL: ${{ vars.SLEET_FEED_URL || 'https://pkg.kzu.app/index.json' }}
 
 defaults:
   run:
