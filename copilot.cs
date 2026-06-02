@@ -1,43 +1,6 @@
-﻿// Copilot BYOK (Bring Your Own Key) CLI
-//
-// A CLI tool that lets you run GitHub Copilot with your own API keys for
-// third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
-//
-// Model IDs: Uses exact ID from /v1/models endpoint for COPILOT_MODEL (preserves
-// composite "[VENDOR]/[MODEL]" format required by NVIDIA/OpenRouter).
-//
-// First-run: 
-//   dnx runfile kzu/run:copilot.cs --alias copilot 
-//   
-// Use specific SHA, branch or tag to pin version (i.e. kzu/run@main:copilot.cs or kzu/run@0ec029d80:copilot.cs)
-// Use whichever alias you want to avoid entering the full ref (or don't specify an alias at all)
-//
-// Subsequent runs: 
-//   dnx runfile copilot [script args] -- [copilot CLI args]
-//
-// Commands:
-//   run (default) - Launch Copilot with a configured BYOK provider and model.
-//                   Sets COPILOT_PROVIDER_* and COPILOT_MODEL (full original ID)
-//                   environment variables before spawning the `copilot` process.
-//   add           - Interactively add a new provider: pick from a remote catalog
-//                   (or built-in fallback list), enter/confirm the base URL, supply
-//                   an API key, and select which models to enable.
-//
-// Configuration:
-//   Provider/model/wire API settings are stored in ~/.copilot/byok.json (plain JSON, no secrets).
-//
-// API Key Security:
-//   API keys are never written to the config file. They are stored and retrieved
-//   using Git Credential Manager (via the Devlooped.CredentialManager package),
-//   which delegates to the OS-native credential store:
-//     - Windows: Windows Credential Manager (DPAPI-encrypted)
-//     - macOS:   Keychain
-//     - Linux:   libsecret / GPG-encrypted credential store
-//   Keys are saved with the provider base URL as the target and the provider name
-//   as the account, so each provider/endpoint pair gets its own credential entry.
-//   At runtime the key is read from the credential store and passed to Copilot
-//   solely through the COPILOT_PROVIDER_API_KEY environment variable of the child
-//   process — it is never logged or persisted to disk.
+﻿#:property PackageId=copilot
+#:property PackageVersion=0.2.0
+#:property Description=Run GitHub Copilot with your own API keys for third-party LLM providers.
 
 #:package Spectre.Console@0.55.*
 #:package Spectre.Console.Cli@0.55.*

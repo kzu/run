@@ -1,0 +1,58 @@
+# Publishes scripts that are packable
+# Pushes CI feed if secrets.SLEET_CONNECTION is provided
+
+name: publish
+on: 
+  workflow_dispatch:
+    inputs:
+      configuration:
+        type: choice
+        description: Configuration
+        options: 
+          - Release
+          - Debug
+  push:
+    branches: [ main, 'dev/*' ]
+
+env:
+  DOTNET_NOLOGO: true
+  MSBUILDTERMINALLOGGER: off
+  Configuration: ${{ github.event.inputs.configuration || 'Release' }}
+  GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  SLEET_FEED_URL: ${{ vars.SLEET_FEED_URL }}
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🤘 checkout
+        uses: actions/checkout@v4
+
+      - name: 🙏 build
+        run: gci *.cs | where { (dotnet build $_ --getProperty=IsPackable) -eq 'true' } | %{ dotnet pack $_ -bl:"$($_.basename).binlog" }
+
+      - name: 🐛 logs
+        uses: actions/upload-artifact@v4
+        if: runner.debug && always()
+        with:
+          name: logs
+          path: '*.binlog'
+
+      - name: 🚀 nuget
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        if: ${{ env.NUGET_API_KEY != '' && github.ref == 'refs/heads/main' }}
+        working-directory: artifacts
+        run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{secrets.NUGET_API_KEY}} --skip-duplicate
+
+      - name: 🚀 sleet
+        env:
+          SLEET_CONNECTION: ${{ secrets.SLEET_CONNECTION }}
+        if: env.SLEET_CONNECTION != ''
+        run: |
+          dotnet tool update sleet -g --allow-downgrade --version $(curl -s --compressed ${{ vars.SLEET_FEED_URL }} | jq '.["sleet:version"]' -r)        
+          sleet push artifacts --config none -f --verbose -p "SLEET_FEED_CONTAINER=nuget" -p "SLEET_FEED_CONNECTIONSTRING=${{ secrets.SLEET_CONNECTION }}" -p "SLEET_FEED_TYPE=azure" || echo "No packages found"

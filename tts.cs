@@ -1,12 +1,5 @@
-// xAI Text-to-Speech CLI
-// Generate MP3 audio from text using the xAI TTS API (https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)
-// Uses the bidirectional WebSocket API (wss://api.x.ai/v1/tts) — no 15,000 character limit.
-//
-// Examples:
-//   tts -t "Hello from xAI in a confident voice." -o hello.mp3
-//   tts -f input.txt -o speech.mp3 -v rex
-//   echo "Text via stdin works great too." | tts -o stdin.mp3 -v rex -l en
-//   tts -t "Bonjour le monde" --language fr --voice ara -o bonjour.mp3
+#:property PackageId=tts
+#:property PackageVersion=0.2.0
 
 #:package ConsoleAppFramework@5.*
 #:package Spectre.Console@0.51.*
