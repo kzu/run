@@ -1,5 +1,6 @@
-﻿#:package LibGit2Sharp@0.*
+﻿#:package LibGit2Sharp@0.31.1
 #:package Spectre.Console@0.*
+#:property RestoreSources=https://api.nuget.org/v3/index.json;https://pkg.kzu.app/index.json
 #nullable enable
 using System;
 using System.Linq;
