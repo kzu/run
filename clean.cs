@@ -1,4 +1,9 @@
 ﻿// Cleans bin/obj recursively
+#:property PackageId=cleanr
+#:property PackageVersion=0.1.0
+#:property Description=Recursively clean bin/obj (and optionally node_modules) directories.
+#:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
+
 #:package Spectre.Console@0.51.*
 #:property Nullable=enable
 #:property ImplicitUsings=enable
