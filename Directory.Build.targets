@@ -27,6 +27,13 @@
     <PackageIconFile>$([System.IO.Path]::ChangeExtension($(EntryPointFilePath), '.png'))</PackageIconFile>
     <PackageIconFile>$([System.IO.Path]::GetFilename($(PackageIconFile)))</PackageIconFile>
     <PackageIcon Condition="Exists('$(PackageIconFile)')">$(PackageIconFile)</PackageIcon>
+
+    <ToolCommandName Condition="'$(PackageId)' != '' and '$(ToolCommandName)' == ''">$(PackageId)</ToolCommandName>
+  </PropertyGroup>
+
+  <!-- Native AOT RID packs otherwise ship multi-megabyte PDBs inside the nupkg. -->
+  <PropertyGroup Condition="'$(FileBasedProgram)' == 'true' and '$(PublishAot)' == 'true' and '$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != 'any'">
+    <StripSymbols Condition="'$(StripSymbols)' == ''">true</StripSymbols>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(FileBasedProgram)' == 'true' and Exists('$(CandidateReadme)')">
@@ -41,6 +48,22 @@
     <Dependent Include="*.md;*.png;*.binlog" />
     <None Include="@(Dependent)" DependentUpon="%(Filename).cs" />
   </ItemGroup>
+
+  <!-- CI pack-plan: identity + RID/AOT/TFM without packing (do not read inferred RuntimeIdentifiers). -->
+  <Target Name="GetPackPlan" Returns="@(PackPlan)">
+    <PropertyGroup>
+      <_PackPlanFile>$(EntryPointFilePath)</_PackPlanFile>
+      <_PackPlanFile Condition="'$(_PackPlanFile)' == ''">$(MSBuildProjectFile)</_PackPlanFile>
+    </PropertyGroup>
+    <ItemGroup Condition="'$(IsPackable)' == 'true' and '$(_PackPlanFile)' != ''">
+      <PackPlan Include="$([System.IO.Path]::GetFileName($(_PackPlanFile)))">
+        <PackageId>$(PackageId)</PackageId>
+        <PublishAot>$(PublishAot)</PublishAot>
+        <ToolPackageRuntimeIdentifiers>$(ToolPackageRuntimeIdentifiers)</ToolPackageRuntimeIdentifiers>
+        <TargetFramework>$(TargetFramework)</TargetFramework>
+      </PackPlan>
+    </ItemGroup>
+  </Target>
 
   <UsingTask TaskName="DumpItems" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>

@@ -1,14 +1,14 @@
-# Publishes scripts that are packable
-# Pushes CI feed if secrets.SLEET_CONNECTION is provided
+# Packs file-based tools (pointer + RID-specific) and pushes collected nupkgs.
+# RID jobs are planned from each script's ToolPackageRuntimeIdentifiers / AOT / TFM.
 
 name: publish
-on: 
+on:
   workflow_dispatch:
     inputs:
       configuration:
         type: choice
         description: Configuration
-        options: 
+        options:
           - Release
           - Debug
   push:
@@ -26,33 +26,140 @@ defaults:
     shell: pwsh
 
 jobs:
-  publish:
+  plan:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has-rid-packs: ${{ steps.plan.outputs.has-rid-packs }}
     steps:
       - name: 🤘 checkout
         uses: actions/checkout@v4
 
-      - name: 🙏 build
-        run: gci *.cs | where { (dotnet build $_ --getProperty=IsPackable) -eq 'true' } | %{ dotnet pack $_ -bl:"$($_.basename).binlog" }
+      - name: ⚙ dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: 🔎 plan
+        id: plan
+        run: ./.github/workflows/pack.ps1 -Mode plan
+
+      - name: 📤 pack-plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-plan
+          path: pack-plan.json
+          if-no-files-found: error
+
+  pack:
+    needs: plan
+    if: needs.plan.outputs.has-rid-packs == 'true'
+    name: pack-${{ matrix.rid }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - name: 🤘 checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙ dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: 📥 pack-plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pack-plan
+
+      - name: 📦 pack
+        run: ./.github/workflows/pack.ps1 -Mode rid -Rid '${{ matrix.rid }}'
+
+      - name: 📤 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.rid }}
+          path: artifacts/*.nupkg
+          retention-days: 30
+          if-no-files-found: error
 
       - name: 🐛 logs
         uses: actions/upload-artifact@v4
         if: runner.debug && always()
         with:
-          name: logs
+          name: logs-${{ matrix.rid }}
           path: '*.binlog'
 
-      - name: 🚀 nuget
+  pointer:
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🤘 checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙ dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: 📥 pack-plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pack-plan
+
+      - name: 📦 pointer
+        run: ./.github/workflows/pack.ps1 -Mode pointer
+
+      - name: 📤 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-pointer
+          path: artifacts/*.nupkg
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: 🐛 logs
+        uses: actions/upload-artifact@v4
+        if: runner.debug && always()
+        with:
+          name: logs-pointer
+          path: '*.binlog'
+
+  publish:
+    needs: [plan, pack, pointer]
+    if: |
+      always() &&
+      needs.plan.result == 'success' &&
+      needs.pointer.result == 'success' &&
+      (needs.pack.result == 'success' || needs.pack.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🤘 checkout
+        uses: actions/checkout@v4
+
+      - name: ⚙ dotnet
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.x
+
+      - name: 📥 pack-plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pack-plan
+
+      - name: 📥 packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: package-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: 🚀 push
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-        if: ${{ env.NUGET_API_KEY != '' && github.ref == 'refs/heads/main' }}
-        working-directory: artifacts
-        run: dotnet nuget push *.nupkg -s https://api.nuget.org/v3/index.json -k ${{secrets.NUGET_API_KEY}} --skip-duplicate
-
-      - name: 🚀 sleet
-        env:
           SLEET_CONNECTION: ${{ secrets.SLEET_CONNECTION }}
-        if: env.SLEET_CONNECTION != ''
         run: |
-          dotnet tool update sleet -g --allow-downgrade --version $(curl -s --compressed ${{ vars.SLEET_FEED_URL }} | jq '.["sleet:version"]' -r)        
-          sleet push artifacts --config none -f --verbose -p "SLEET_FEED_CONTAINER=nuget" -p "SLEET_FEED_CONNECTIONSTRING=${{ secrets.SLEET_CONNECTION }}" -p "SLEET_FEED_TYPE=azure" || echo "No packages found"
+          $pushNuGet = ($env:NUGET_API_KEY -and '${{ github.ref }}' -eq 'refs/heads/main')
+          ./.github/workflows/pack.ps1 -Mode push -PushNuGet:$pushNuGet

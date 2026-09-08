@@ -9,6 +9,7 @@ bin
 obj
 artifacts
 pack
+pack-plan.json
 TestResults
 results
 BenchmarkDotNet.Artifacts

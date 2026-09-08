@@ -1,5 +1,7 @@
 #:property PackageId=tts
-#:property PackageVersion=0.2.0
+#:property PackageVersion=0.3.0
+#:property Description=Convert text to MP3 speech using the xAI TTS API.
+#:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
 
 #:package ConsoleAppFramework@5.*
 #:package Spectre.Console@0.51.*
@@ -10,6 +12,7 @@ using System.Diagnostics;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using ConsoleAppFramework;
 using Spectre.Console;
 
@@ -130,7 +133,7 @@ static async Task<int> Tts(
                             continue;
 
                         await SendTextDeltasAsync(ws, utterance, cancellationToken);
-                        await SendJsonAsync(ws, new { type = "text.done" }, cancellationToken);
+                        await SendJsonAsync(ws, new JsonObject { ["type"] = "text.done" }, cancellationToken);
 
                         // Receive audio for *this* utterance only. Break on its audio.done.
                         bool utteranceComplete = false;
@@ -234,10 +237,9 @@ static async Task<int> Tts(
 }
 
 // WebSocket helpers for the bidirectional TTS API
-static async Task SendJsonAsync(ClientWebSocket ws, object payload, CancellationToken ct)
+static async Task SendJsonAsync(ClientWebSocket ws, JsonNode payload, CancellationToken ct)
 {
-    string json = JsonSerializer.Serialize(payload);
-    byte[] bytes = Encoding.UTF8.GetBytes(json);
+    byte[] bytes = Encoding.UTF8.GetBytes(payload.ToJsonString());
     await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
 }
 
@@ -247,7 +249,7 @@ static async Task SendTextDeltasAsync(ClientWebSocket ws, string text, Cancellat
 
     if (text.Length <= maxDelta)
     {
-        await SendJsonAsync(ws, new { type = "text.delta", delta = text }, ct);
+        await SendJsonAsync(ws, new JsonObject { ["type"] = "text.delta", ["delta"] = text }, ct);
         return;
     }
 
@@ -278,7 +280,7 @@ static async Task SendTextDeltasAsync(ClientWebSocket ws, string text, Cancellat
         }
 
         string chunk = text[pos..end];
-        await SendJsonAsync(ws, new { type = "text.delta", delta = chunk }, ct);
+        await SendJsonAsync(ws, new JsonObject { ["type"] = "text.delta", ["delta"] = chunk }, ct);
         pos = end;
     }
 }
