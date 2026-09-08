@@ -21,12 +21,18 @@
 
   <PropertyGroup Condition="'$(FileBasedProgram)' == 'true'">
     <CandidateReadme>$([System.IO.Path]::ChangeExtension($(EntryPointFilePath), '.md'))</CandidateReadme>
-    <PackageReadmeFile Condition="Exists('$(CandidateReadme)')">readme.md</PackageReadmeFile>
+    <!-- Pointer package only: RID-specific nupkgs (including 'any') must not ship readme/icon. -->
+    <PackageReadmeFile Condition="Exists('$(CandidateReadme)') and '$(RuntimeIdentifier)' == ''">readme.md</PackageReadmeFile>
 
     <!-- Override icon with file-based icon if present -->
     <PackageIconFile>$([System.IO.Path]::ChangeExtension($(EntryPointFilePath), '.png'))</PackageIconFile>
     <PackageIconFile>$([System.IO.Path]::GetFilename($(PackageIconFile)))</PackageIconFile>
-    <PackageIcon Condition="Exists('$(PackageIconFile)')">$(PackageIconFile)</PackageIcon>
+    <PackageIcon Condition="Exists('$(PackageIconFile)') and '$(RuntimeIdentifier)' == ''">$(PackageIconFile)</PackageIcon>
+    <!-- Directory.Build.props sets PackageIcon; clear it so RID packs do not require or embed the file. -->
+    <PackageIcon Condition="'$(RuntimeIdentifier)' != ''"></PackageIcon>
+    <PackageReadmeFile Condition="'$(RuntimeIdentifier)' != ''"></PackageReadmeFile>
+    <!-- Missing-readme is a pack analysis message with no NU code, so NoWarn cannot suppress it. -->
+    <NoPackageAnalysis Condition="'$(RuntimeIdentifier)' != ''">true</NoPackageAnalysis>
 
     <ToolCommandName Condition="'$(PackageId)' != '' and '$(ToolCommandName)' == ''">$(PackageId)</ToolCommandName>
   </PropertyGroup>
@@ -36,11 +42,11 @@
     <StripSymbols Condition="'$(StripSymbols)' == ''">true</StripSymbols>
   </PropertyGroup>
 
-  <ItemGroup Condition="'$(FileBasedProgram)' == 'true' and Exists('$(CandidateReadme)')">
+  <ItemGroup Condition="'$(FileBasedProgram)' == 'true' and Exists('$(CandidateReadme)') and '$(RuntimeIdentifier)' == ''">
     <None Include="$(CandidateReadme)" Pack="true" PackagePath="readme.md" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(PackageIcon)' != ''">
+  <ItemGroup Condition="'$(PackageIcon)' != '' and '$(RuntimeIdentifier)' == ''">
     <None Include="$(PackageIcon)" Pack="true" PackagePath="$(PackageIcon)" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
