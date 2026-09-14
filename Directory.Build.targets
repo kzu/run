@@ -46,7 +46,7 @@
     <None Include="$(CandidateReadme)" Pack="true" PackagePath="readme.md" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(PackageIcon)' != '' and '$(RuntimeIdentifier)' == ''">
+  <ItemGroup Condition="'$(PackageIcon)' != ''">
     <None Include="$(PackageIcon)" Pack="true" PackagePath="$(PackageIcon)" CopyToOutputDirectory="Never" CopyToPublishDirectory="Never" />
   </ItemGroup>
 

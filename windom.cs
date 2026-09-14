@@ -1,7 +1,6 @@
 ﻿#:property PackageId=windom
 #:property PackageVersion=0.1.0
 #:property Description=Dumps UI automation model of an app
-#:property ToolPackageRuntimeIdentifiers=win-x64
 #:property EnableWindowsTargeting=true
 
 #:property TargetFramework=net10.0-windows
