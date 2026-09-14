@@ -15,6 +15,7 @@ results
 BenchmarkDotNet.Artifacts
 /app
 /mcps
+.agents/skills
 .vs
 .vscode
 .genaiscript
