@@ -55,6 +55,27 @@
     <None Include="@(Dependent)" DependentUpon="%(Filename).cs" />
   </ItemGroup>
 
+  <!-- NETSDK1146: PackAsTool forbids TargetPlatformIdentifier. Clear it only around validation so
+       netN.0-windows file-based tools still pack (tools/netN.0/any). Runtime stays Windows-only. -->
+  <Target Name="AllowWindowsPackAsTool"
+          BeforeTargets="_PackToolValidation"
+          Condition="'$(FileBasedProgram)' == 'true' and '$(PackAsTool)' == 'true' and '$(TargetPlatformIdentifier)' != ''">
+    <PropertyGroup>
+      <_SavedTargetPlatformIdentifier>$(TargetPlatformIdentifier)</_SavedTargetPlatformIdentifier>
+      <_SavedTargetPlatformMoniker>$(TargetPlatformMoniker)</_SavedTargetPlatformMoniker>
+      <TargetPlatformIdentifier></TargetPlatformIdentifier>
+      <TargetPlatformMoniker></TargetPlatformMoniker>
+    </PropertyGroup>
+  </Target>
+  <Target Name="RestoreWindowsPackAsTool"
+          AfterTargets="_PackToolValidation"
+          Condition="'$(_SavedTargetPlatformIdentifier)' != ''">
+    <PropertyGroup>
+      <TargetPlatformIdentifier>$(_SavedTargetPlatformIdentifier)</TargetPlatformIdentifier>
+      <TargetPlatformMoniker>$(_SavedTargetPlatformMoniker)</TargetPlatformMoniker>
+    </PropertyGroup>
+  </Target>
+
   <!-- CI pack-plan: identity + RID/AOT/TFM without packing (do not read inferred RuntimeIdentifiers). -->
   <Target Name="GetPackPlan" Returns="@(PackPlan)">
     <PropertyGroup>
