@@ -109,6 +109,7 @@ try
         conflicts = AnsiConsole.Status()
             .Start($"Rebasing onto {upstreamBranch.FriendlyName}...", ctx =>
             {
+                var rebaseOptions = new RebaseOptions();
                 var rebaseResult = repo.Rebase.Start(
                     branch: currentBranch,
                     upstream: upstreamBranch,
