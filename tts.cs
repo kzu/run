@@ -1,12 +1,12 @@
 #:property PackageId=tts
 #:property PackageVersion=0.3.0
-#:property Version=$(PackageVersion)
+#:property ProjectProperty=PackageVersion
 #:property Description=Convert text to MP3 speech using the xAI TTS API.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
 
 #:package ConsoleAppFramework@5.*
 #:package Spectre.Console@0.51.*
-#:package ThisAssembly.AssemblyInfo@2.*
+#:package ThisAssembly.Project@2.*
 #:package ThisAssembly.Git@2.*
 #:property Nullable=enable
 #:property ImplicitUsings=enable
@@ -22,7 +22,7 @@ using Spectre.Console;
 if (OperatingSystem.IsWindows())
     Console.InputEncoding = Console.OutputEncoding = Encoding.UTF8;
 
-ConsoleApp.Version = $"v{ThisAssembly.Info.InformationalVersion.Split('+')[0]} ({ThisAssembly.Git.Sha})";
+ConsoleApp.Version = $"v{ThisAssembly.Project.PackageVersion} ({ThisAssembly.Git.Sha})";
 
 await ConsoleApp.RunAsync(args, Tts);
 

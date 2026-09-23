@@ -1,12 +1,12 @@
 ﻿#:property PackageId=copilot
 #:property PackageVersion=0.2.0
-#:property Version=$(PackageVersion)
+#:property ProjectProperty=PackageVersion
 #:property Description=Run GitHub Copilot with your own API keys for third-party LLM providers.
 
 #:package Spectre.Console@0.55.*
 #:package Spectre.Console.Cli@0.55.*
 #:package Devlooped.CredentialManager@2.7.*
-#:package ThisAssembly.AssemblyInfo@2.*
+#:package ThisAssembly.Project@2.*
 #:package ThisAssembly.Git@2.*
 
 #nullable enable
@@ -37,7 +37,7 @@ var app = new CommandApp();
 app.Configure(config =>
 {
     config.SetApplicationName("copilot");
-    config.SetApplicationVersion($"v{ThisAssembly.Info.InformationalVersion.Split('+')[0]} ({ThisAssembly.Git.Sha})");
+    config.SetApplicationVersion($"v{ThisAssembly.Project.PackageVersion} ({ThisAssembly.Git.Sha})");
 
     config.AddCommand<AddCommand>("add")
         .WithDescription("Add a new BYOK provider configuration");
