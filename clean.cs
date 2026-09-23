@@ -1,6 +1,7 @@
 ﻿// Cleans bin/obj recursively
 #:property PackageId=cleanr
-#:property PackageVersion=0.1.0
+#:property PackageVersion=0.1.1
+#:property ProjectProperty=PackageVersion
 #:property Description=Recursively clean bin/obj (and optionally node_modules) directories.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
 
@@ -8,9 +9,13 @@
 #:property Nullable=enable
 #:property ImplicitUsings=enable
 #:package ConsoleAppFramework@5.*
+#:package ThisAssembly.Project@2.*
+#:package ThisAssembly.Git@2.*
 
 using ConsoleAppFramework;
 using Spectre.Console;
+
+ConsoleApp.Version = $"v{ThisAssembly.Project.PackageVersion} ({ThisAssembly.Git.Sha})";
 
 ConsoleApp.Run(args, Clean);
 

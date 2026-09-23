@@ -1,5 +1,5 @@
 ﻿#:property PackageId=copilot
-#:property PackageVersion=0.2.0
+#:property PackageVersion=0.2.1
 #:property ProjectProperty=PackageVersion
 #:property Description=Run GitHub Copilot with your own API keys for third-party LLM providers.
 

@@ -1,5 +1,5 @@
 #:property PackageId=tts
-#:property PackageVersion=0.3.0
+#:property PackageVersion=0.3.1
 #:property ProjectProperty=PackageVersion
 #:property Description=Convert text to MP3 speech using the xAI TTS API.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
