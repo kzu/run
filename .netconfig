@@ -13,3 +13,13 @@
 	sha = 7c1c6e615b5785e0ac9db33cb17343d6c1de16ff
 	etag = 5e6a10be141ee629201bfad01eae09b5c36a67f541ec7ab411ae400b5d73de1d
 	weak
+[file "System/QuaranTime.cs"]
+	url = https://github.com/devlooped/catbag/blob/main/System/QuaranTime.cs
+	sha = 83ae670d5c69de16dd0d3a15448bdefa2ef6cdfe
+	etag = 2de43ea10bb6dca91326c303fd4daf1c6493d3bc63511f3fd906c7f75117f49e
+	weak
+[file "System/Base62.cs"]
+	url = https://github.com/devlooped/catbag/blob/main/System/Base62.cs
+	sha = cf76df0d6a218c26ebe117339fe3445050b0532a
+	etag = aed711a45e051edfddfcb76d9f8021d30f9817c342cfe8d1cc38f2af37b47aa8
+	weak
