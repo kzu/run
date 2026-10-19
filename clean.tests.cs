@@ -141,6 +141,7 @@ Check("help artifacts", help.Stdout.Contains("--artifacts", StringComparison.Ord
 Check("help rust", help.Stdout.Contains("--rust", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help nuget", help.Stdout.Contains("--nuget", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help node", help.Stdout.Contains("--node", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help all", help.Stdout.Contains("--all", StringComparison.Ordinal), help.Stdout + help.Stderr);
 
 Scenario("no flags", "", root =>
 {
@@ -209,6 +210,79 @@ finally
 {
     if (Directory.Exists(packages)) Directory.Delete(packages, true);
     if (Directory.Exists(http)) Directory.Delete(http, true);
+}
+
+string allPackages = OutsideCache("clean-nuget-packages-all");
+string allHttp = OutsideCache("clean-nuget-http-all");
+try
+{
+    Scenario("all", "--all", root =>
+    {
+        Expect(root, "bin", false);
+        Expect(root, "obj", false);
+        Expect(root, "node_modules", false);
+        Expect(root, "publish", false);
+        Expect(root, "artifacts", false);
+        Expect(root, Path.Combine("cargo", "target"), false);
+        Expect(root, Path.Combine("notcargo", "target", "keep.txt"), true);
+        Expect(root, Path.Combine(".hidden", "publish"), false);
+        Expect(root, Path.Combine(".hidden", "bin"), false);
+        Check("all nuget packages removed", !Directory.Exists(allPackages), allPackages);
+        Check("all nuget http removed", !Directory.Exists(allHttp), allHttp);
+    }, new Dictionary<string, string>
+    {
+        ["NUGET_PACKAGES"] = allPackages,
+        ["NUGET_HTTP_CACHE_PATH"] = allHttp,
+    });
+}
+finally
+{
+    if (Directory.Exists(allPackages)) Directory.Delete(allPackages, true);
+    if (Directory.Exists(allHttp)) Directory.Delete(allHttp, true);
+}
+
+if (OperatingSystem.IsWindows())
+{
+    string lockedRoot = Path.Combine(Path.GetTempPath(), "clean-locked-" + Guid.NewGuid().ToString("n"));
+    string locked = Path.Combine(lockedRoot, "000-locked");
+    string laterBin = Path.Combine(lockedRoot, "zzz-later", "bin");
+    string account = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+    try
+    {
+        Directory.CreateDirectory(Path.Combine(lockedRoot, "bin"));
+        File.WriteAllText(Path.Combine(lockedRoot, "bin", "marker.txt"), "x");
+        Directory.CreateDirectory(locked);
+        File.WriteAllText(Path.Combine(locked, "secret.txt"), "x");
+        Directory.CreateDirectory(laterBin);
+        File.WriteAllText(Path.Combine(laterBin, "marker.txt"), "x");
+
+        var deny = RunProcess("icacls", $"\"{locked}\" /deny \"{account}:(OI)(CI)F\"", clearNuGetEnv: false);
+        Check("deny acl", deny.Code == 0, deny.Stdout + deny.Stderr);
+
+        string[] order = Directory.GetDirectories(lockedRoot);
+        int lockedIndex = Array.FindIndex(order, path => Path.GetFileName(path) == "000-locked");
+        int laterIndex = Array.FindIndex(order, path => Path.GetFileName(path) == "zzz-later");
+
+        var run = Run(lockedRoot, "");
+        flagsLog.AppendLine("== locked ==");
+        flagsLog.AppendLine(run.Stdout);
+        flagsLog.AppendLine(run.Stderr);
+        flagsLog.AppendLine();
+        Check("locked exit", run.Code == 0, run.Stderr + run.Stdout);
+        string flat = run.Stdout.Replace("\r", "").Replace("\n", "");
+        Check("locked reported", flat.Contains("000-locked", StringComparison.OrdinalIgnoreCase) && flat.Contains("denied", StringComparison.OrdinalIgnoreCase), run.Stdout);
+        Check("locked root bin removed", !Directory.Exists(Path.Combine(lockedRoot, "bin")), lockedRoot);
+        if (laterIndex > lockedIndex)
+            Check("locked sibling cleaned", !Directory.Exists(laterBin), laterBin);
+    }
+    finally
+    {
+        RunProcess("icacls", $"\"{locked}\" /remove:d \"{account}\"", clearNuGetEnv: false);
+        if (Directory.Exists(lockedRoot))
+        {
+            try { Directory.Delete(lockedRoot, true); } catch { /* leftover fixture is fine */ }
+        }
+    }
 }
 
 string dryPackages = OutsideCache("clean-nuget-packages-dry");

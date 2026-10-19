@@ -2,7 +2,7 @@
 #:property PackageId=cleanr
 #:property PackageVersion=0.1.1
 #:property ProjectProperty=PackageVersion
-#:property Description=Recursively clean bin/obj and optionally node_modules, publish, artifacts, Cargo target, and NuGet caches.
+#:property Description=Recursively clean bin/obj and optionally node_modules, publish, artifacts, Cargo target, and NuGet caches. --all turns every opt-in on.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
 
 #:package Spectre.Console@0.51.*
@@ -29,6 +29,7 @@ ConsoleApp.Run(args, Clean);
 /// <param name="artifacts">Opt-in to clean artifacts directories.</param>
 /// <param name="rust">Opt-in to clean Cargo target directories.</param>
 /// <param name="nuget">Opt-in to clean NuGet http-cache and global-packages directories.</param>
+/// <param name="all">Turn on node, dotted, publish, artifacts, rust, and nuget.</param>
 static void Clean(
     bool dryRun,
     [Argument] string? dir = default,
@@ -38,8 +39,19 @@ static void Clean(
     bool artifacts = false,
     bool rust = false,
     bool nuget = false,
+    bool all = false,
     CancellationToken cancellation = default)
 {
+    if (all)
+    {
+        node = true;
+        dotted = true;
+        publish = true;
+        artifacts = true;
+        rust = true;
+        nuget = true;
+    }
+
     if (nuget && !cancellation.IsCancellationRequested)
     {
         foreach (string cache in ResolveNuGetCaches())
@@ -73,7 +85,18 @@ static void DeleteDirectories(
     if (cleanRust && IsCargoProject(dir))
         TryDeleteDirectory(Path.Combine(dir, "target"), dryRun);
 
-    foreach (string subDir in Directory.GetDirectories(dir))
+    string[] subDirs;
+    try
+    {
+        subDirs = Directory.GetDirectories(dir);
+    }
+    catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+    {
+        ReportFailure(dir, ex);
+        return;
+    }
+
+    foreach (string subDir in subDirs)
     {
         string name = Path.GetFileName(subDir);
         if (!cleanDotted && name.StartsWith('.'))
@@ -210,11 +233,11 @@ static bool IsSafeCachePath(string path)
 
 static void TryDeleteDirectory(string dir, bool dryRun)
 {
-    if (!Directory.Exists(dir))
-        return;
-
     try
     {
+        if (!Directory.Exists(dir))
+            return;
+
         if (!dryRun)
             Directory.Delete(dir, true);
 
@@ -222,9 +245,12 @@ static void TryDeleteDirectory(string dir, bool dryRun)
     }
     catch (Exception ex)
     {
-        AnsiConsole.MarkupLine($":cross_mark: {Markup.Escape(DisplayPath(dir))}: {Markup.Escape(ex.Message)}");
+        ReportFailure(dir, ex);
     }
 }
+
+static void ReportFailure(string dir, Exception ex) =>
+    AnsiConsole.MarkupLine($":cross_mark: {Markup.Escape(DisplayPath(dir))}: {Markup.Escape(ex.Message)}");
 
 static string DisplayPath(string dir)
 {
