@@ -1,6 +1,6 @@
 // Cleans bin/obj recursively
 #:property PackageId=cleanr
-#:property PackageVersion=0.1.1
+#:property PackageVersion=0.2.0
 #:property ProjectProperty=PackageVersion
 #:property Description=Recursively clean bin/obj and optionally node_modules, publish, artifacts, Cargo target, and NuGet caches. --all turns every opt-in on.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
