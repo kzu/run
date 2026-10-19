@@ -3,7 +3,7 @@
 [![Version](https://img.shields.io/nuget/vpre/cleanr.svg?color=royalblue)](https://www.nuget.org/packages/cleanr)
 [![Downloads](https://img.shields.io/nuget/dt/cleanr.svg?color=darkmagenta)](https://www.nuget.org/packages/cleanr)
 
-What you would expect `dotnet clean` to do, but it doesn't :)
+The ultimate developer clean tool.
 
 Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_modules` plus the npm and pnpm caches (`--node`), `publish` (`--publish`), `artifacts` (`--artifacts`), Visual Studio `.vs` caches (`--vs`), Cargo `target` directories and the `CARGO_HOME` registry and git caches (`--rust`), the Go build and module caches (`--go`), the user-level Yarn cache (`--yarn`), the pip cache (`--pip`), the uv cache (`--uv`), NuGet http and global-package caches (`--nuget`), and hidden directories (`--dotted`). `--all` turns every one of those opt-ins on.
 
