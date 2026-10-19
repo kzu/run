@@ -2,6 +2,9 @@
 <#
 .SYNOPSIS
   Plan, pack, and push file-based tool packages (pointer + RID-specific).
+.PARAMETER ChangedSince
+  With -Mode plan, only root .cs files that differ from this commit are planned.
+  Forty zeros means a newly created ref. Omit to plan every root script.
 #>
 [CmdletBinding()]
 param(
@@ -9,6 +12,7 @@ param(
     [ValidateSet('plan', 'rid', 'pointer', 'push')]
     [string]$Mode,
 
+    [string]$ChangedSince,
     [string]$Rid,
     [string]$PlanPath = 'pack-plan.json',
     [string]$Artifacts = 'artifacts',
@@ -36,6 +40,171 @@ function Get-RepoRoot {
         return (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
     }
     return (Get-Location).Path
+}
+
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory)][string]$FileName,
+        [Parameter(Mandatory)][string[]]$ArgumentList
+    )
+
+    $hasNativePreference = [bool](Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue)
+    $savedPreference = if ($hasNativePreference) { $PSNativeCommandUseErrorActionPreference } else { $false }
+    $PSNativeCommandUseErrorActionPreference = $false
+    try {
+        $output = @(& $FileName @ArgumentList)
+        return [pscustomobject]@{
+            ExitCode = $LASTEXITCODE
+            Lines    = @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+        }
+    }
+    finally {
+        if ($hasNativePreference) {
+            $PSNativeCommandUseErrorActionPreference = $savedPreference
+        }
+    }
+}
+
+function Select-RootCsFiles($Paths) {
+    $seen = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in @($Paths)) {
+        if ([string]::IsNullOrWhiteSpace("$path")) {
+            continue
+        }
+
+        $rel = ("$path" -replace '\\', '/').Trim()
+        $leaf = [IO.Path]::GetFileName($rel)
+        if ($rel -ne $leaf) {
+            continue
+        }
+        if (-not $leaf.EndsWith('.cs', [StringComparison]::OrdinalIgnoreCase)) {
+            continue
+        }
+        if (-not (Test-Path -LiteralPath $leaf -PathType Leaf)) {
+            continue
+        }
+        [void]$seen.Add($leaf)
+    }
+
+    return @($seen | Sort-Object)
+}
+
+function Get-CompareApiPaths([string]$Base) {
+    if ([string]::IsNullOrWhiteSpace($env:GITHUB_REPOSITORY)) {
+        throw "Commit $Base is unavailable locally and GITHUB_REPOSITORY is not set."
+    }
+
+    $head = $env:GITHUB_SHA
+    if ([string]::IsNullOrWhiteSpace($head)) {
+        $rev = Invoke-NativeCommand git @('rev-parse', 'HEAD')
+        if ($rev.ExitCode -ne 0 -or $rev.Lines.Count -lt 1) {
+            throw 'Could not resolve HEAD.'
+        }
+        $head = $rev.Lines[0]
+    }
+
+    $endpoint = "repos/$($env:GITHUB_REPOSITORY)/compare/${Base}...${head}"
+    Write-Host "gh api $endpoint"
+    $compare = Invoke-NativeCommand gh @(
+        'api', $endpoint,
+        '--jq', '.files[] | select(.status != "removed" and .status != "unchanged") | .filename'
+    )
+    if ($compare.ExitCode -ne 0) {
+        throw "GitHub compare failed for $Base...$head (exit $($compare.ExitCode))."
+    }
+
+    return @($compare.Lines)
+}
+
+function Get-DiffNames([string[]]$Revisions) {
+    $argumentList = @('diff', '--name-only', '--diff-filter=ACMR') + $Revisions + @('--', '*.cs')
+    Write-Host "git $($argumentList -join ' ')"
+    return Invoke-NativeCommand git $argumentList
+}
+
+function Get-NewRefChangedPaths {
+    Write-Host 'New git ref; comparing with origin/main.'
+    $fetch = Invoke-NativeCommand git @('fetch', '--no-tags', 'origin', 'main')
+    if ($fetch.ExitCode -ne 0) {
+        throw "Could not fetch origin/main to plan a newly pushed branch (exit $($fetch.ExitCode))."
+    }
+
+    $base = Invoke-NativeCommand git @('rev-parse', 'origin/main')
+    $head = Invoke-NativeCommand git @('rev-parse', 'HEAD')
+    if ($base.ExitCode -ne 0 -or $head.ExitCode -ne 0 -or $base.Lines.Count -lt 1 -or $head.Lines.Count -lt 1) {
+        throw 'Could not resolve origin/main or HEAD.'
+    }
+
+    if ($base.Lines[0] -eq $head.Lines[0]) {
+        $branch = Invoke-NativeCommand git @('rev-parse', '--abbrev-ref', 'HEAD')
+        $name = if ($branch.ExitCode -eq 0 -and $branch.Lines.Count -ge 1) { $branch.Lines[0] } else { '' }
+        if ($name -eq 'main') {
+            Write-Host 'Initial push of main; planning every root .cs file.'
+            return @(Get-ChildItem -File -Filter *.cs | Sort-Object Name | ForEach-Object { $_.Name })
+        }
+
+        Write-Host 'New branch matches main; no .cs changes to publish.'
+        return @()
+    }
+
+    $diff = Get-DiffNames -Revisions @('origin/main...HEAD')
+    if ($diff.ExitCode -ne 0) {
+        Write-Host 'No merge base with main; diffing the two trees.'
+        $diff = Get-DiffNames -Revisions @('origin/main', 'HEAD')
+        if ($diff.ExitCode -ne 0) {
+            throw "git diff against origin/main failed with exit $($diff.ExitCode)."
+        }
+    }
+
+    return @($diff.Lines)
+}
+
+function Get-PushChangedPaths([string]$Since) {
+    $known = Invoke-NativeCommand git @('rev-parse', '--verify', '--quiet', "${Since}^{commit}")
+    if ($known.ExitCode -ne 0) {
+        Write-Host "Pre-push commit $Since is not in the checkout; fetching it."
+        $fetch = Invoke-NativeCommand git @('fetch', '--no-tags', '--depth=1', 'origin', $Since)
+        $known = Invoke-NativeCommand git @('rev-parse', '--verify', '--quiet', "${Since}^{commit}")
+        if ($fetch.ExitCode -ne 0 -or $known.ExitCode -ne 0) {
+            Write-Host "Could not fetch $Since; using the GitHub compare API."
+            return @(Get-CompareApiPaths $Since)
+        }
+    }
+
+    $diff = Get-DiffNames -Revisions @($Since, 'HEAD')
+    if ($diff.ExitCode -ne 0) {
+        throw "git diff $Since HEAD failed with exit $($diff.ExitCode)."
+    }
+
+    return @($diff.Lines)
+}
+
+function Get-ChangedRootCsFiles([string]$Since) {
+    $root = Get-RepoRoot
+    Push-Location $root
+    try {
+        if ([string]::IsNullOrWhiteSpace($Since)) {
+            throw '-ChangedSince is empty. Refusing to plan every root script.'
+        }
+
+        $paths = if ($Since -match '^0+$') {
+            @(Get-NewRefChangedPaths)
+        }
+        else {
+            @(Get-PushChangedPaths $Since)
+        }
+
+        return @(Select-RootCsFiles $paths)
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Test-NeedsPointerPack($Plan) {
+    $rids = @($Plan.rids)
+    $tfm = "$($Plan.targetFramework)"
+    return -not ($rids.Count -eq 0 -and $tfm -match '-windows')
 }
 
 function Write-GitHubOutput([string]$Name, [string]$Value) {
@@ -101,24 +270,45 @@ function Add-MatrixEntry($Matrix, [string]$Os, [string]$RidValue) {
     $Matrix[$key] = [ordered]@{ os = $Os; rid = $RidValue }
 }
 
+function Get-PlanCandidates {
+    if (-not $script:LimitToChanged) {
+        return @(Get-ChildItem -File -Filter *.cs | Sort-Object Name | ForEach-Object { $_.Name })
+    }
+
+    $changed = @(Get-ChangedRootCsFiles -Since $ChangedSince)
+    if ($changed.Count -eq 0) {
+        Write-Host 'No changed root .cs files.'
+    }
+    else {
+        Write-Host "Changed root .cs files: $($changed -join ', ')"
+    }
+
+    return $changed
+}
+
 function Invoke-Plan {
     $root = Get-RepoRoot
     Push-Location $root
     try {
         $files = @()
         $matrix = [ordered]@{}
+        $hasPointerPacks = $false
 
-        foreach ($cs in Get-ChildItem -File -Filter *.cs | Sort-Object Name) {
-            if (-not (Test-HasPackageId $cs.Name)) {
+        foreach ($cs in @(Get-PlanCandidates)) {
+            if (-not (Test-HasPackageId $cs)) {
                 continue
             }
 
-            $plan = Get-FilePackPlan $cs.Name
+            $plan = Get-FilePackPlan $cs
             if ($null -eq $plan) {
                 continue
             }
 
             $files += $plan
+            if (Test-NeedsPointerPack $plan) {
+                $hasPointerPacks = $true
+            }
+
             $rids = @($plan.rids)
             $tfm = $plan.targetFramework
 
@@ -153,10 +343,15 @@ function Invoke-Plan {
 
         $planFullPath = Join-Path $root $PlanPath
         $document | ConvertTo-Json -Depth 8 | Set-Content -Path $planFullPath -Encoding utf8
-        Write-Host "Wrote $planFullPath ($($files.Count) packable file(s), $($matrixItems.Count) RID job(s))."
+        $packed = @($files | ForEach-Object { $_.file })
+        $packedText = if ($packed.Count -eq 0) { 'none' } else { $packed -join ', ' }
+        Write-Host "Wrote $planFullPath ($($packed.Count) packable file(s): $packedText; $($matrixItems.Count) RID job(s))."
 
         $hasRidPacks = $matrixItems.Count -gt 0
+        $hasPackages = $files.Count -gt 0
         Write-GitHubOutput 'has-rid-packs' ($(if ($hasRidPacks) { 'true' } else { 'false' }))
+        Write-GitHubOutput 'has-packages' ($(if ($hasPackages) { 'true' } else { 'false' }))
+        Write-GitHubOutput 'has-pointer-packs' ($(if ($hasPointerPacks) { 'true' } else { 'false' }))
         Write-GitHubOutput 'matrix' (ConvertTo-JsonArray $matrixItems)
     }
     finally {
@@ -231,11 +426,11 @@ function Invoke-PointerPack {
         $plan = Read-Plan
 
         foreach ($file in @($plan.files)) {
-            $rids = @($file.rids)
-            if ($rids.Count -eq 0 -and $file.targetFramework -match '-windows') {
+            if (-not (Test-NeedsPointerPack $file)) {
                 continue
             }
 
+            $rids = @($file.rids)
             Invoke-DotnetPack $file.file @()
 
             if ($rids -contains 'any') {
@@ -371,6 +566,8 @@ function Invoke-Push {
         Pop-Location
     }
 }
+
+$script:LimitToChanged = $PSBoundParameters.ContainsKey('ChangedSince')
 
 switch ($Mode) {
     'plan' { Invoke-Plan }
