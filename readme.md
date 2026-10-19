@@ -41,6 +41,9 @@ for easier reading/editing.
 <!-- include copilot.md -->
 ## Copilot BYOK (Bring Your Own Key) CLI
 
+[![Version](https://img.shields.io/nuget/vpre/copilot.svg?color=royalblue)](https://www.nuget.org/packages/copilot)
+[![Downloads](https://img.shields.io/nuget/dt/copilot.svg?color=darkmagenta)](https://www.nuget.org/packages/copilot)
+
 A CLI tool that lets you run GitHub Copilot with your own API keys for
 third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
 
@@ -140,6 +143,9 @@ The following environment variables are set before spawning `copilot`:
 <!-- include tts.md -->
 ## xAI Text-to-Speech CLI
 
+[![Version](https://img.shields.io/nuget/vpre/tts.svg?color=royalblue)](https://www.nuget.org/packages/tts)
+[![Downloads](https://img.shields.io/nuget/dt/tts.svg?color=darkmagenta)](https://www.nuget.org/packages/tts)
+
 Generate MP3 audio from text using the xAI TTS API (https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)
 Uses the bidirectional WebSocket API (wss://api.x.ai/v1/tts) — no 15,000 character limit.
 
@@ -226,7 +232,10 @@ Then run with `tts [args]`.
 <!-- tts.md -->
 
 <!-- include clean.md -->
-## Clean bin/obj recursively
+## Clean recursively
+
+[![Version](https://img.shields.io/nuget/vpre/cleanr.svg?color=royalblue)](https://www.nuget.org/packages/cleanr)
+[![Downloads](https://img.shields.io/nuget/dt/cleanr.svg?color=darkmagenta)](https://www.nuget.org/packages/cleanr)
 
 What you would expect `dotnet clean` to do, but it doesn't :)
 
@@ -237,7 +246,7 @@ Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_mo
 ### Usage
 
 ```pwsh
-# Clean bin/obj from the current directory
+# Clean recursively from the current directory
 cleanr
 
 # Preview what would be deleted

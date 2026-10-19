@@ -1,4 +1,7 @@
-## Clean bin/obj recursively
+## Clean recursively
+
+[![Version](https://img.shields.io/nuget/vpre/cleanr.svg?color=royalblue)](https://www.nuget.org/packages/cleanr)
+[![Downloads](https://img.shields.io/nuget/dt/cleanr.svg?color=darkmagenta)](https://www.nuget.org/packages/cleanr)
 
 What you would expect `dotnet clean` to do, but it doesn't :)
 
@@ -9,7 +12,7 @@ Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_mo
 ### Usage
 
 ```pwsh
-# Clean bin/obj from the current directory
+# Clean recursively from the current directory
 cleanr
 
 # Preview what would be deleted

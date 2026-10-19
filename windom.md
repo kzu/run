@@ -1,5 +1,8 @@
 ## Windows UI automation dump CLI
 
+[![Version](https://img.shields.io/nuget/vpre/windom.svg?color=royalblue)](https://www.nuget.org/packages/windom)
+[![Downloads](https://img.shields.io/nuget/dt/windom.svg?color=darkmagenta)](https://www.nuget.org/packages/windom)
+
 Dumps the UI Automation tree of a running Windows app as JSON.
 Windows-only (UI Automation).
 

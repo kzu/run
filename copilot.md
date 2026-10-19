@@ -1,5 +1,8 @@
 ## Copilot BYOK (Bring Your Own Key) CLI
 
+[![Version](https://img.shields.io/nuget/vpre/copilot.svg?color=royalblue)](https://www.nuget.org/packages/copilot)
+[![Downloads](https://img.shields.io/nuget/dt/copilot.svg?color=darkmagenta)](https://www.nuget.org/packages/copilot)
+
 A CLI tool that lets you run GitHub Copilot with your own API keys for
 third-party LLM providers (OpenAI, Anthropic, xAI, OpenRouter, NVIDIA, etc.).
 

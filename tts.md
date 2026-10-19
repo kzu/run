@@ -1,5 +1,8 @@
 ## xAI Text-to-Speech CLI
 
+[![Version](https://img.shields.io/nuget/vpre/tts.svg?color=royalblue)](https://www.nuget.org/packages/tts)
+[![Downloads](https://img.shields.io/nuget/dt/tts.svg?color=darkmagenta)](https://www.nuget.org/packages/tts)
+
 Generate MP3 audio from text using the xAI TTS API (https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)
 Uses the bidirectional WebSocket API (wss://api.x.ai/v1/tts) — no 15,000 character limit.
 
