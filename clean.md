@@ -5,7 +5,7 @@
 
 What you would expect `dotnet clean` to do, but it doesn't :)
 
-Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_modules` plus the npm and pnpm caches (`--node`), `publish` (`--publish`), `artifacts` (`--artifacts`), Cargo `target` directories and the `CARGO_HOME` registry and git caches (`--rust`), the Go build and module caches (`--go`), the user-level Yarn cache (`--yarn`), the pip cache (`--pip`), the uv cache (`--uv`), NuGet http and global-package caches (`--nuget`), and hidden directories (`--dotted`). `--all` turns every one of those opt-ins on.
+Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_modules` plus the npm and pnpm caches (`--node`), `publish` (`--publish`), `artifacts` (`--artifacts`), Visual Studio `.vs` caches (`--vs`), Cargo `target` directories and the `CARGO_HOME` registry and git caches (`--rust`), the Go build and module caches (`--go`), the user-level Yarn cache (`--yarn`), the pip cache (`--pip`), the uv cache (`--uv`), NuGet http and global-package caches (`--nuget`), and hidden directories (`--dotted`). `--all` turns every one of those opt-ins on.
 
 ![clean](https://raw.githubusercontent.com/kzu/run/main/img/clean.png)
 
@@ -27,8 +27,8 @@ cleanr --node
 # Also recurse into hidden directories
 cleanr --dotted
 
-# Also delete publish, artifacts, and Cargo target plus CARGO_HOME registry/git
-cleanr --publish --artifacts --rust
+# Also delete publish, artifacts, Visual Studio .vs caches, and Cargo target plus CARGO_HOME registry/git
+cleanr --publish --artifacts --vs --rust
 
 # Also delete the NuGet http-cache and global-packages folders
 cleanr --nuget
@@ -49,6 +49,7 @@ cleanr --all
 | `--node` | Also clean `node_modules` directories, the npm cache, and the pnpm store and metadata cache. |
 | `--publish` | Also clean `publish` directories. |
 | `--artifacts` | Also clean `artifacts` directories. |
+| `--vs` | Also clean `.vs` directories (Visual Studio caches). |
 | `--rust` | Also clean Cargo `target` directories (a `Cargo.toml` sits next to `target`) and the `CARGO_HOME` `registry` and `git` caches. `bin`, config, and credentials stay. |
 | `--nuget` | Also clean the NuGet `http-cache` and `global-packages` directories. |
 | `--go` | Also clean the Go build cache (`GOCACHE`) and module cache (`GOMODCACHE`). |
@@ -56,7 +57,7 @@ cleanr --all
 | `--pip` | Also clean the pip cache. |
 | `--uv` | Also clean the uv cache. |
 | `--dotted` | Also clean inside hidden directories. |
-| `--all` | Turn on `--node`, `--dotted`, `--publish`, `--artifacts`, `--rust`, `--nuget`, `--go`, `--yarn`, `--pip`, and `--uv`. |
+| `--all` | Turn on `--node`, `--dotted`, `--publish`, `--artifacts`, `--vs`, `--rust`, `--nuget`, `--go`, `--yarn`, `--pip`, and `--uv`. |
 
 User-level caches follow the tool's own override, then the tool's reported path, then the usual default directory. A set but unusable value (`off`, or a relative path) does not fall through to the default.
 

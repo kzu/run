@@ -46,6 +46,8 @@ string Fixture()
         Path.Combine("notcargo", "target"),
         Path.Combine(".hidden", "publish"),
         Path.Combine(".hidden", "bin"),
+        ".vs",
+        Path.Combine(".hidden", ".vs"),
     })
         Directory.CreateDirectory(Path.Combine(root, relative));
 
@@ -59,6 +61,8 @@ string Fixture()
     File.WriteAllText(Path.Combine(root, "artifacts", "marker.txt"), "x");
     File.WriteAllText(Path.Combine(root, ".hidden", "publish", "marker.txt"), "x");
     File.WriteAllText(Path.Combine(root, ".hidden", "bin", "marker.txt"), "x");
+    File.WriteAllText(Path.Combine(root, ".vs", "marker.txt"), "x");
+    File.WriteAllText(Path.Combine(root, ".hidden", ".vs", "marker.txt"), "x");
     return root;
 }
 
@@ -158,6 +162,7 @@ void Scenario(string name, string arguments, Action<string> assert, IDictionary<
 var help = RunProcess("dotnet", $"\"{clean}\" -- --help", clearNuGetEnv: false);
 Check("help publish", help.Stdout.Contains("--publish", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help artifacts", help.Stdout.Contains("--artifacts", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help vs", help.Stdout.Contains("--vs", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help rust", help.Stdout.Contains("--rust", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help nuget", help.Stdout.Contains("--nuget", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help node", help.Stdout.Contains("--node", StringComparison.Ordinal), help.Stdout + help.Stderr);
@@ -178,6 +183,8 @@ Scenario("no flags", "", root =>
     Expect(root, Path.Combine("notcargo", "target"), true);
     Expect(root, Path.Combine(".hidden", "publish"), true);
     Expect(root, Path.Combine(".hidden", "bin"), true);
+    Expect(root, ".vs", true);
+    Expect(root, Path.Combine(".hidden", ".vs"), true);
 });
 
 var nodeCaches = ToolCaches();
@@ -215,7 +222,18 @@ Scenario("artifacts", "--artifacts", root =>
 {
     Expect(root, "artifacts", false);
     Expect(root, "publish", true);
+    Expect(root, ".vs", true);
     Expect(root, Path.Combine("cargo", "target"), true);
+});
+
+Scenario("vs", "--vs", root =>
+{
+    Expect(root, ".vs", false);
+    Expect(root, Path.Combine(".hidden", ".vs"), true);
+    Expect(root, Path.Combine(".hidden", "bin"), true);
+    Expect(root, "bin", false);
+    Expect(root, "publish", true);
+    Expect(root, "node_modules", true);
 });
 
 var rustCaches = ToolCaches();
@@ -283,6 +301,8 @@ try
         Expect(root, Path.Combine("notcargo", "target", "keep.txt"), true);
         Expect(root, Path.Combine(".hidden", "publish"), false);
         Expect(root, Path.Combine(".hidden", "bin"), false);
+        Expect(root, ".vs", false);
+        Expect(root, Path.Combine(".hidden", ".vs"), false);
         Check("all nuget packages removed", !Directory.Exists(allPackages), allPackages);
         Check("all nuget http removed", !Directory.Exists(allHttp), allHttp);
         Check("all npm removed", !Directory.Exists(allCaches.Npm), allCaches.Npm);
@@ -391,6 +411,8 @@ try
         Expect(root, Path.Combine("cargo", "target", "debug", "app.txt"), true);
         Expect(root, Path.Combine("notcargo", "target", "keep.txt"), true);
         Expect(root, Path.Combine(".hidden", "bin"), true);
+        Expect(root, ".vs", true);
+        Expect(root, Path.Combine(".hidden", ".vs"), true);
         Check("dry nuget packages kept", Directory.Exists(dryPackages), dryPackages);
         Check("dry nuget http kept", Directory.Exists(dryHttp), dryHttp);
         Check("dry npm kept", Directory.Exists(dryCaches.Npm), dryCaches.Npm);

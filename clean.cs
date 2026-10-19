@@ -1,8 +1,8 @@
 // Cleans bin/obj recursively
 #:property PackageId=cleanr
-#:property PackageVersion=0.3.0
+#:property PackageVersion=0.3.1
 #:property ProjectProperty=PackageVersion
-#:property Description=Recursively clean bin/obj and optionally node, Cargo, Go, Yarn, pip, uv, publish, artifacts, and NuGet caches. --all turns every opt-in on.
+#:property Description=Recursively clean bin/obj and optionally node, Cargo, Go, Yarn, pip, uv, publish, artifacts, Visual Studio .vs caches, and NuGet caches. --all turns every opt-in on.
 #:property ToolPackageRuntimeIdentifiers=win-x64;linux-x64;osx-arm64;any
 
 #:package Spectre.Console@0.51.*
@@ -21,20 +21,21 @@ ConsoleApp.Version = $"v{ThisAssembly.Project.PackageVersion} ({ThisAssembly.Git
 
 ConsoleApp.Run(args, Clean);
 
-/// <summary>Recursively cleans bin/obj and optionally node, Cargo, Go, Yarn, pip, uv, publish, artifacts, and NuGet caches.</summary>
+/// <summary>Recursively cleans bin/obj and optionally node, Cargo, Go, Yarn, pip, uv, publish, artifacts, Visual Studio .vs caches, and NuGet caches.</summary>
 /// <param name="dir">Optional directory to start the clean. Defaults to current directory.</param>
 /// <param name="dryRun">List directories but don't actually delete them.</param>
 /// <param name="node">Opt-in to clean node_modules directories and the npm and pnpm caches.</param>
 /// <param name="dotted">Opt-in to clean inside hidden directories.</param>
 /// <param name="publish">Opt-in to clean publish directories.</param>
 /// <param name="artifacts">Opt-in to clean artifacts directories.</param>
+/// <param name="vs">Opt-in to clean .vs directories (Visual Studio caches).</param>
 /// <param name="rust">Opt-in to clean Cargo target directories and the CARGO_HOME registry and git caches.</param>
 /// <param name="nuget">Opt-in to clean NuGet http-cache and global-packages directories.</param>
 /// <param name="go">Opt-in to clean the Go build cache and module cache.</param>
 /// <param name="yarn">Opt-in to clean the user-level Yarn cache.</param>
 /// <param name="pip">Opt-in to clean the pip cache.</param>
 /// <param name="uv">Opt-in to clean the uv cache.</param>
-/// <param name="all">Turn on node, dotted, publish, artifacts, rust, nuget, go, yarn, pip, and uv.</param>
+/// <param name="all">Turn on node, dotted, publish, artifacts, vs, rust, nuget, go, yarn, pip, and uv.</param>
 static void Clean(
     bool dryRun,
     [Argument] string? dir = default,
@@ -42,6 +43,7 @@ static void Clean(
     bool dotted = false,
     bool publish = false,
     bool artifacts = false,
+    bool vs = false,
     bool rust = false,
     bool nuget = false,
     bool go = false,
@@ -57,6 +59,7 @@ static void Clean(
         dotted = true;
         publish = true;
         artifacts = true;
+        vs = true;
         rust = true;
         nuget = true;
         go = true;
@@ -81,7 +84,7 @@ static void Clean(
     if (uv)
         DeleteCaches(dryRun, cancellation, ResolveUvCaches());
 
-    DeleteDirectories(root, dryRun, node, dotted, publish, artifacts, rust, cancellation);
+    DeleteDirectories(root, dryRun, node, dotted, publish, artifacts, vs, rust, cancellation);
 }
 
 static void DeleteDirectories(
@@ -91,6 +94,7 @@ static void DeleteDirectories(
     bool cleanDotted,
     bool cleanPublish,
     bool cleanArtifacts,
+    bool cleanVs,
     bool cleanRust,
     CancellationToken cancellation)
 {
@@ -105,6 +109,8 @@ static void DeleteDirectories(
         TryDeleteDirectory(Path.Combine(dir, "publish"), dryRun);
     if (cleanArtifacts)
         TryDeleteDirectory(Path.Combine(dir, "artifacts"), dryRun);
+    if (cleanVs)
+        TryDeleteDirectory(Path.Combine(dir, ".vs"), dryRun);
     if (cleanRust && IsCargoProject(dir))
         TryDeleteDirectory(Path.Combine(dir, "target"), dryRun);
 
@@ -134,13 +140,16 @@ static void DeleteDirectories(
         if (cleanArtifacts && name == "artifacts")
             continue;
 
+        if (cleanVs && name == ".vs")
+            continue;
+
         if (cleanRust && name == "target" && IsCargoProject(dir))
             continue;
 
         if (cancellation.IsCancellationRequested)
             break;
 
-        DeleteDirectories(subDir, dryRun, cleanNode, cleanDotted, cleanPublish, cleanArtifacts, cleanRust, cancellation);
+        DeleteDirectories(subDir, dryRun, cleanNode, cleanDotted, cleanPublish, cleanArtifacts, cleanVs, cleanRust, cancellation);
     }
 }
 
