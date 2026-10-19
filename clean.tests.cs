@@ -70,6 +70,26 @@ string OutsideCache(string name)
     return path;
 }
 
+ToolCacheSet ToolCaches()
+{
+    string cargoHome = OutsideCache("clean-cargo");
+    Directory.CreateDirectory(Path.Combine(cargoHome, "registry"));
+    Directory.CreateDirectory(Path.Combine(cargoHome, "git"));
+    Directory.CreateDirectory(Path.Combine(cargoHome, "bin"));
+    File.WriteAllText(Path.Combine(cargoHome, "bin", "keep.txt"), "x");
+    File.WriteAllText(Path.Combine(cargoHome, "config.toml"), "keep");
+    return new ToolCacheSet(
+        cargoHome,
+        OutsideCache("clean-npm"),
+        OutsideCache("clean-pnpm-store"),
+        OutsideCache("clean-pnpm-cache"),
+        OutsideCache("clean-yarn"),
+        OutsideCache("clean-gocache"),
+        OutsideCache("clean-gomod"),
+        OutsideCache("clean-pip"),
+        OutsideCache("clean-uv"));
+}
+
 (int Code, string Stdout, string Stderr) Run(string root, string arguments, IDictionary<string, string>? env = null, bool clearNuGetEnv = false)
 {
     var psi = new ProcessStartInfo("dotnet", $"\"{clean}\" -- {arguments} \"{root}\"")
@@ -141,6 +161,10 @@ Check("help artifacts", help.Stdout.Contains("--artifacts", StringComparison.Ord
 Check("help rust", help.Stdout.Contains("--rust", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help nuget", help.Stdout.Contains("--nuget", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help node", help.Stdout.Contains("--node", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help go", help.Stdout.Contains("--go", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help yarn", help.Stdout.Contains("--yarn", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help pip", help.Stdout.Contains("--pip", StringComparison.Ordinal), help.Stdout + help.Stderr);
+Check("help uv", help.Stdout.Contains("--uv", StringComparison.Ordinal), help.Stdout + help.Stderr);
 Check("help all", help.Stdout.Contains("--all", StringComparison.Ordinal), help.Stdout + help.Stderr);
 
 Scenario("no flags", "", root =>
@@ -156,14 +180,27 @@ Scenario("no flags", "", root =>
     Expect(root, Path.Combine(".hidden", "bin"), true);
 });
 
-Scenario("node", "--node", root =>
+var nodeCaches = ToolCaches();
+try
 {
-    Expect(root, "bin", false);
-    Expect(root, "obj", false);
-    Expect(root, "node_modules", false);
-    Expect(root, "publish", true);
-    Expect(root, "artifacts", true);
-});
+    Scenario("node", "--node", root =>
+    {
+        Expect(root, "bin", false);
+        Expect(root, "obj", false);
+        Expect(root, "node_modules", false);
+        Expect(root, "publish", true);
+        Expect(root, "artifacts", true);
+        Check("npm cache removed", !Directory.Exists(nodeCaches.Npm), nodeCaches.Npm);
+        Check("pnpm store removed", !Directory.Exists(nodeCaches.PnpmStore), nodeCaches.PnpmStore);
+        Check("pnpm cache removed", !Directory.Exists(nodeCaches.PnpmCache), nodeCaches.PnpmCache);
+        Check("node kept cargo registry", Directory.Exists(Path.Combine(nodeCaches.CargoHome, "registry")), nodeCaches.CargoHome);
+        Check("node kept yarn", Directory.Exists(nodeCaches.Yarn), nodeCaches.Yarn);
+    }, nodeCaches.Env);
+}
+finally
+{
+    nodeCaches.Cleanup();
+}
 
 Scenario("publish", "--publish", root =>
 {
@@ -181,13 +218,26 @@ Scenario("artifacts", "--artifacts", root =>
     Expect(root, Path.Combine("cargo", "target"), true);
 });
 
-Scenario("rust", "--rust", root =>
+var rustCaches = ToolCaches();
+try
 {
-    Expect(root, Path.Combine("cargo", "target"), false);
-    Expect(root, Path.Combine("notcargo", "target", "keep.txt"), true);
-    Expect(root, "bin", false);
-    Expect(root, "publish", true);
-});
+    Scenario("rust", "--rust", root =>
+    {
+        Expect(root, Path.Combine("cargo", "target"), false);
+        Expect(root, Path.Combine("notcargo", "target", "keep.txt"), true);
+        Expect(root, "bin", false);
+        Expect(root, "publish", true);
+        Check("cargo registry removed", !Directory.Exists(Path.Combine(rustCaches.CargoHome, "registry")), rustCaches.CargoHome);
+        Check("cargo git removed", !Directory.Exists(Path.Combine(rustCaches.CargoHome, "git")), rustCaches.CargoHome);
+        Check("cargo bin kept", File.Exists(Path.Combine(rustCaches.CargoHome, "bin", "keep.txt")), rustCaches.CargoHome);
+        Check("cargo config kept", File.Exists(Path.Combine(rustCaches.CargoHome, "config.toml")), rustCaches.CargoHome);
+        Check("rust kept npm cache", Directory.Exists(rustCaches.Npm), rustCaches.Npm);
+    }, rustCaches.Env);
+}
+finally
+{
+    rustCaches.Cleanup();
+}
 
 string packages = OutsideCache("clean-nuget-packages");
 string http = OutsideCache("clean-nuget-http");
@@ -214,6 +264,12 @@ finally
 
 string allPackages = OutsideCache("clean-nuget-packages-all");
 string allHttp = OutsideCache("clean-nuget-http-all");
+var allCaches = ToolCaches();
+var allEnv = new Dictionary<string, string>(allCaches.Env)
+{
+    ["NUGET_PACKAGES"] = allPackages,
+    ["NUGET_HTTP_CACHE_PATH"] = allHttp,
+};
 try
 {
     Scenario("all", "--all", root =>
@@ -229,16 +285,46 @@ try
         Expect(root, Path.Combine(".hidden", "bin"), false);
         Check("all nuget packages removed", !Directory.Exists(allPackages), allPackages);
         Check("all nuget http removed", !Directory.Exists(allHttp), allHttp);
-    }, new Dictionary<string, string>
-    {
-        ["NUGET_PACKAGES"] = allPackages,
-        ["NUGET_HTTP_CACHE_PATH"] = allHttp,
-    });
+        Check("all npm removed", !Directory.Exists(allCaches.Npm), allCaches.Npm);
+        Check("all pnpm store removed", !Directory.Exists(allCaches.PnpmStore), allCaches.PnpmStore);
+        Check("all pnpm cache removed", !Directory.Exists(allCaches.PnpmCache), allCaches.PnpmCache);
+        Check("all cargo registry removed", !Directory.Exists(Path.Combine(allCaches.CargoHome, "registry")), allCaches.CargoHome);
+        Check("all cargo git removed", !Directory.Exists(Path.Combine(allCaches.CargoHome, "git")), allCaches.CargoHome);
+        Check("all cargo bin kept", File.Exists(Path.Combine(allCaches.CargoHome, "bin", "keep.txt")), allCaches.CargoHome);
+        Check("all go build removed", !Directory.Exists(allCaches.GoBuild), allCaches.GoBuild);
+        Check("all go mod removed", !Directory.Exists(allCaches.GoMod), allCaches.GoMod);
+        Check("all yarn removed", !Directory.Exists(allCaches.Yarn), allCaches.Yarn);
+        Check("all pip removed", !Directory.Exists(allCaches.Pip), allCaches.Pip);
+        Check("all uv removed", !Directory.Exists(allCaches.Uv), allCaches.Uv);
+    }, allEnv);
 }
 finally
 {
     if (Directory.Exists(allPackages)) Directory.Delete(allPackages, true);
     if (Directory.Exists(allHttp)) Directory.Delete(allHttp, true);
+    allCaches.Cleanup();
+}
+
+var toolCaches = ToolCaches();
+try
+{
+    Scenario("go yarn pip uv", "--go --yarn --pip --uv", root =>
+    {
+        Expect(root, "bin", false);
+        Expect(root, "node_modules", true);
+        Expect(root, Path.Combine("cargo", "target"), true);
+        Check("go build removed", !Directory.Exists(toolCaches.GoBuild), toolCaches.GoBuild);
+        Check("go mod removed", !Directory.Exists(toolCaches.GoMod), toolCaches.GoMod);
+        Check("yarn removed", !Directory.Exists(toolCaches.Yarn), toolCaches.Yarn);
+        Check("pip removed", !Directory.Exists(toolCaches.Pip), toolCaches.Pip);
+        Check("uv removed", !Directory.Exists(toolCaches.Uv), toolCaches.Uv);
+        Check("tools kept npm", Directory.Exists(toolCaches.Npm), toolCaches.Npm);
+        Check("tools kept cargo registry", Directory.Exists(Path.Combine(toolCaches.CargoHome, "registry")), toolCaches.CargoHome);
+    }, toolCaches.Env);
+}
+finally
+{
+    toolCaches.Cleanup();
 }
 
 if (OperatingSystem.IsWindows())
@@ -287,9 +373,15 @@ if (OperatingSystem.IsWindows())
 
 string dryPackages = OutsideCache("clean-nuget-packages-dry");
 string dryHttp = OutsideCache("clean-nuget-http-dry");
+var dryCaches = ToolCaches();
+var dryEnv = new Dictionary<string, string>(dryCaches.Env)
+{
+    ["NUGET_PACKAGES"] = dryPackages,
+    ["NUGET_HTTP_CACHE_PATH"] = dryHttp,
+};
 try
 {
-    Scenario("dry-run all", "--dry-run --node --publish --artifacts --rust --nuget", root =>
+    Scenario("dry-run all", "--dry-run --all", root =>
     {
         Expect(root, "bin", true);
         Expect(root, "obj", true);
@@ -301,24 +393,38 @@ try
         Expect(root, Path.Combine(".hidden", "bin"), true);
         Check("dry nuget packages kept", Directory.Exists(dryPackages), dryPackages);
         Check("dry nuget http kept", Directory.Exists(dryHttp), dryHttp);
-    }, new Dictionary<string, string>
-    {
-        ["NUGET_PACKAGES"] = dryPackages,
-        ["NUGET_HTTP_CACHE_PATH"] = dryHttp,
-    });
+        Check("dry npm kept", Directory.Exists(dryCaches.Npm), dryCaches.Npm);
+        Check("dry pnpm store kept", Directory.Exists(dryCaches.PnpmStore), dryCaches.PnpmStore);
+        Check("dry cargo registry kept", Directory.Exists(Path.Combine(dryCaches.CargoHome, "registry")), dryCaches.CargoHome);
+        Check("dry cargo bin kept", File.Exists(Path.Combine(dryCaches.CargoHome, "bin", "keep.txt")), dryCaches.CargoHome);
+        Check("dry go build kept", Directory.Exists(dryCaches.GoBuild), dryCaches.GoBuild);
+        Check("dry go mod kept", Directory.Exists(dryCaches.GoMod), dryCaches.GoMod);
+        Check("dry yarn kept", Directory.Exists(dryCaches.Yarn), dryCaches.Yarn);
+        Check("dry pip kept", Directory.Exists(dryCaches.Pip), dryCaches.Pip);
+        Check("dry uv kept", Directory.Exists(dryCaches.Uv), dryCaches.Uv);
+    }, dryEnv);
 }
 finally
 {
     if (Directory.Exists(dryPackages)) Directory.Delete(dryPackages, true);
     if (Directory.Exists(dryHttp)) Directory.Delete(dryHttp, true);
+    dryCaches.Cleanup();
 }
 
 File.WriteAllText(Path.Combine(logDir, "clean-flags.log"), flagsLog.ToString());
 
 string left = Fixture();
 string right = Fixture();
-var first = Run(left, "--node --publish --artifacts --rust");
-var second = Run(right, "--node --publish --artifacts --rust");
+string absent = Path.Combine(Path.GetTempPath(), "clean-absent-" + Guid.NewGuid().ToString("n"));
+var absentEnv = new Dictionary<string, string>
+{
+    ["CARGO_HOME"] = Path.Combine(absent, "cargo"),
+    ["npm_config_cache"] = Path.Combine(absent, "npm"),
+    ["pnpm_config_store_dir"] = Path.Combine(absent, "pnpm-store"),
+    ["pnpm_config_cache_dir"] = Path.Combine(absent, "pnpm-cache"),
+};
+var first = Run(left, "--node --publish --artifacts --rust", absentEnv);
+var second = Run(right, "--node --publish --artifacts --rust", absentEnv);
 File.WriteAllText(Path.Combine(logDir, "clean-launch-1.log"), first.Stdout + "\n" + Snapshot(left));
 File.WriteAllText(Path.Combine(logDir, "clean-launch-2.log"), second.Stdout + "\n" + Snapshot(right));
 Check("launch stdout", Normalize(first.Stdout, left) == Normalize(second.Stdout, right), "normalized stdout differed");
@@ -405,4 +511,49 @@ static (int Code, string Stdout, string Stderr) RunProcess(string file, string a
     Task<string> stderrTask = process.StandardError.ReadToEndAsync();
     process.WaitForExit();
     return (process.ExitCode, stdoutTask.Result, stderrTask.Result);
+}
+
+sealed class ToolCacheSet(
+    string cargoHome,
+    string npm,
+    string pnpmStore,
+    string pnpmCache,
+    string yarn,
+    string goBuild,
+    string goMod,
+    string pip,
+    string uv)
+{
+    public string CargoHome { get; } = cargoHome;
+    public string Npm { get; } = npm;
+    public string PnpmStore { get; } = pnpmStore;
+    public string PnpmCache { get; } = pnpmCache;
+    public string Yarn { get; } = yarn;
+    public string GoBuild { get; } = goBuild;
+    public string GoMod { get; } = goMod;
+    public string Pip { get; } = pip;
+    public string Uv { get; } = uv;
+    public Dictionary<string, string> Env { get; } = new()
+    {
+        ["CARGO_HOME"] = cargoHome,
+        ["npm_config_cache"] = npm,
+        ["pnpm_config_store_dir"] = pnpmStore,
+        ["pnpm_config_cache_dir"] = pnpmCache,
+        ["YARN_CACHE_FOLDER"] = yarn,
+        ["GOCACHE"] = goBuild,
+        ["GOMODCACHE"] = goMod,
+        ["PIP_CACHE_DIR"] = pip,
+        ["UV_CACHE_DIR"] = uv,
+    };
+
+    public void Cleanup()
+    {
+        foreach (string path in new[] { CargoHome, Npm, PnpmStore, PnpmCache, Yarn, GoBuild, GoMod, Pip, Uv })
+        {
+            if (!Directory.Exists(path))
+                continue;
+
+            try { Directory.Delete(path, true); } catch { /* leftover fixture is fine */ }
+        }
+    }
 }
