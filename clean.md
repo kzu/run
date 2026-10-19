@@ -2,7 +2,7 @@
 
 What you would expect `dotnet clean` to do, but it doesn't :)
 
-Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_modules` (`--node`) and hidden directories (`--dotted`).
+Recursively deletes `bin` and `obj` directories. Optionally also cleans `node_modules` (`--node`), `publish` (`--publish`), `artifacts` (`--artifacts`), Cargo `target` directories (`--rust`), NuGet http and global-package caches (`--nuget`), and hidden directories (`--dotted`).
 
 ![clean](https://raw.githubusercontent.com/kzu/run/main/img/clean.png)
 
@@ -23,6 +23,12 @@ cleanr --node
 
 # Also recurse into hidden directories
 cleanr --dotted
+
+# Also delete publish, artifacts, and Cargo target directories
+cleanr --publish --artifacts --rust
+
+# Also delete the NuGet http-cache and global-packages folders
+cleanr --nuget
 ```
 
 ### Arguments
@@ -32,6 +38,10 @@ cleanr --dotted
 | `dir` | Optional directory to start the clean. Defaults to the current directory. |
 | `--dry-run` | List directories but don't actually delete them. |
 | `--node` | Also clean `node_modules` directories. |
+| `--publish` | Also clean `publish` directories. |
+| `--artifacts` | Also clean `artifacts` directories. |
+| `--rust` | Also clean Cargo `target` directories (a `Cargo.toml` sits next to `target`). |
+| `--nuget` | Also clean the NuGet `http-cache` and `global-packages` directories. |
 | `--dotted` | Also clean inside hidden directories. |
 
 ### Source-based distribution
